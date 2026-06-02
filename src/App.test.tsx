@@ -772,7 +772,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 110, yCm: 150, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -800,7 +800,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 400, yCm: 250, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -831,7 +831,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -886,7 +886,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -928,7 +928,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -989,7 +989,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -1031,7 +1031,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     })
     const blobStore = createMemoryBlobStore()
     const { unmount } = render(
@@ -1077,7 +1077,7 @@ describe('App', () => {
         // pl-b center-Y = 150.5 → within 1cm tolerance of pl-a's 150
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150.5, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -1101,5 +1101,68 @@ describe('App', () => {
       const after = screen.getByTestId('placement-pl-b')
       expect(Number(after.getAttribute('data-y-cm'))).toBeCloseTo(150)
     })
+  })
+
+  it('renders ruler ticks, a silhouette, and a floor line by default', async () => {
+    render(<App port={seededPort()} createId={() => 'unused'} />)
+
+    await screen.findByText('North Wall')
+
+    // Ruler container present.
+    const ruler = await screen.findByTestId('overlay-ruler')
+    expect(ruler).toBeInTheDocument()
+    // Ticks at 0, 50, 100, ..., 500 (wall width) on the horizontal axis.
+    const horizontalTicks = ruler.querySelectorAll(
+      '[data-tick-axis="horizontal"]',
+    )
+    const tickCms = Array.from(horizontalTicks).map((t) =>
+      Number(t.getAttribute('data-tick-cm')),
+    )
+    expect(tickCms).toEqual([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500])
+
+    // Silhouette + floor line render to scale on the wall.
+    const silhouette = screen.getByTestId('overlay-silhouette')
+    expect(silhouette).toHaveAttribute('data-height-cm', '170')
+    expect(screen.getByTestId('overlay-floor')).toBeInTheDocument()
+  })
+
+  it('toggles the ruler off and on via the sidebar; choice persists across reload', async () => {
+    const user = userEvent.setup()
+    const port = seededPort()
+    const { unmount } = render(
+      <App port={port} createId={() => 'unused'} />,
+    )
+
+    await screen.findByText('North Wall')
+    expect(screen.getByTestId('overlay-ruler')).toBeInTheDocument()
+
+    // Click the ruler toggle.
+    await user.click(screen.getByLabelText(/ruler/i))
+    await waitFor(() =>
+      expect(screen.queryByTestId('overlay-ruler')).not.toBeInTheDocument(),
+    )
+
+    unmount()
+    render(<App port={port} createId={() => 'unused'} />)
+    await screen.findByText('North Wall')
+
+    // Setting persisted; ruler still off after reload.
+    expect(screen.queryByTestId('overlay-ruler')).not.toBeInTheDocument()
+  })
+
+  it('toggles the silhouette + floor off and on via the sidebar', async () => {
+    const user = userEvent.setup()
+    render(<App port={seededPort()} createId={() => 'unused'} />)
+
+    await screen.findByText('North Wall')
+    expect(screen.getByTestId('overlay-silhouette')).toBeInTheDocument()
+    expect(screen.getByTestId('overlay-floor')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/silhouette/i))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('overlay-silhouette')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId('overlay-floor')).not.toBeInTheDocument()
   })
 })

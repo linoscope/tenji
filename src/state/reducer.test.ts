@@ -100,7 +100,7 @@ describe('resizeWall', () => {
           longEdgeCm: 40,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const shrunk = appReducer(seeded, {
@@ -180,7 +180,7 @@ describe('placePhoto', () => {
       photos: [
         { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -210,7 +210,7 @@ describe('placePhoto', () => {
       photos: [
         { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -241,7 +241,7 @@ describe('movePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -276,7 +276,7 @@ describe('movePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -305,7 +305,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -339,7 +339,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -365,7 +365,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -383,7 +383,7 @@ describe('selectPlacement', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'selectPlacement', id: 'pl-1' })
@@ -395,7 +395,7 @@ describe('selectPlacement', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'clearSelection' })
@@ -419,7 +419,7 @@ describe('movePlacement (parking)', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -451,7 +451,7 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
@@ -477,7 +477,7 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
@@ -513,7 +513,7 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
@@ -561,7 +561,7 @@ describe('deletePhoto', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
@@ -587,7 +587,7 @@ describe('deletePhoto', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
@@ -618,7 +618,7 @@ describe('deleteWall', () => {
         { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, longEdgeCm: 40 },
         { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, longEdgeCm: 40 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null },
+      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deleteWall', id: 'w1' })
@@ -643,5 +643,43 @@ describe('deleteWall', () => {
 
     expect(b.walls).toHaveLength(0)
     expect(b.ui.activeWallId).toBeNull()
+  })
+})
+
+describe('overlay toggles', () => {
+  it('initialState defaults ruler and silhouette overlays to on', () => {
+    expect(initialState.ui.rulerEnabled).toBe(true)
+    expect(initialState.ui.silhouetteEnabled).toBe(true)
+  })
+
+  it('toggleRuler flips rulerEnabled and leaves silhouetteEnabled alone', () => {
+    const a = appReducer(initialState, { type: 'toggleRuler' })
+    expect(a.ui.rulerEnabled).toBe(false)
+    expect(a.ui.silhouetteEnabled).toBe(true)
+
+    const b = appReducer(a, { type: 'toggleRuler' })
+    expect(b.ui.rulerEnabled).toBe(true)
+  })
+
+  it('toggleSilhouette flips silhouetteEnabled and leaves rulerEnabled alone', () => {
+    const a = appReducer(initialState, { type: 'toggleSilhouette' })
+    expect(a.ui.silhouetteEnabled).toBe(false)
+    expect(a.ui.rulerEnabled).toBe(true)
+
+    const b = appReducer(a, { type: 'toggleSilhouette' })
+    expect(b.ui.silhouetteEnabled).toBe(true)
+  })
+
+  it('hydrate fills missing overlay flags with defaults (backwards compat)', () => {
+    const legacy = {
+      ...initialState,
+      ui: { activeWallId: null, selectedPlacementId: null },
+      // No rulerEnabled / silhouetteEnabled in older snapshots.
+    } as unknown as Parameters<typeof appReducer>[0]
+
+    const after = appReducer(initialState, { type: 'hydrate', state: legacy })
+
+    expect(after.ui.rulerEnabled).toBe(true)
+    expect(after.ui.silhouetteEnabled).toBe(true)
   })
 })

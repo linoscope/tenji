@@ -189,6 +189,12 @@ export default function App({
             onDelete={() => dispatch({ type: 'deleteWall', id: activeWall.id })}
           />
         ) : null}
+        <OverlayControls
+          rulerEnabled={state.ui.rulerEnabled}
+          silhouetteEnabled={state.ui.silhouetteEnabled}
+          onToggleRuler={() => dispatch({ type: 'toggleRuler' })}
+          onToggleSilhouette={() => dispatch({ type: 'toggleSilhouette' })}
+        />
         {selectedPlacement && selectedPhoto ? (
           <PlacementInspector
             key={selectedPlacement.id}
@@ -225,6 +231,8 @@ export default function App({
           photos={state.photos}
           blobStore={blobStoreRef.current}
           selectedPlacementId={state.ui.selectedPlacementId}
+          rulerEnabled={state.ui.rulerEnabled}
+          silhouetteEnabled={state.ui.silhouetteEnabled}
           onDropPhoto={({ photoId, xCm, yCm }) =>
             dispatch({
               type: 'placePhoto',
@@ -316,6 +324,50 @@ function WallEditor({ wall, onRename, onResize, onDelete }: WallEditorProps) {
       >
         Delete wall
       </button>
+    </section>
+  )
+}
+
+type OverlayControlsProps = {
+  rulerEnabled: boolean
+  silhouetteEnabled: boolean
+  onToggleRuler: () => void
+  onToggleSilhouette: () => void
+}
+
+function OverlayControls({
+  rulerEnabled,
+  silhouetteEnabled,
+  onToggleRuler,
+  onToggleSilhouette,
+}: OverlayControlsProps) {
+  return (
+    <section
+      style={{
+        borderTop: '1px solid #d0d0d0',
+        paddingTop: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        fontSize: 12,
+      }}
+    >
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="checkbox"
+          checked={rulerEnabled}
+          onChange={onToggleRuler}
+        />
+        Ruler
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="checkbox"
+          checked={silhouetteEnabled}
+          onChange={onToggleSilhouette}
+        />
+        Silhouette
+      </label>
     </section>
   )
 }

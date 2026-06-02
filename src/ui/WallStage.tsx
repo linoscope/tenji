@@ -12,6 +12,8 @@ type WallStageProps = {
   photos: Photo[]
   blobStore: BlobStore
   selectedPlacementId: string | null
+  rulerEnabled: boolean
+  silhouetteEnabled: boolean
   onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
   onSelectPlacement: (id: string) => void
   onClearSelection: () => void
@@ -29,6 +31,8 @@ export default function WallStage({
   photos,
   blobStore,
   selectedPlacementId,
+  rulerEnabled,
+  silhouetteEnabled,
   onDropPhoto,
   onSelectPlacement,
   onClearSelection,
@@ -83,6 +87,8 @@ export default function WallStage({
         photos={photos}
         blobStore={blobStore}
         selectedPlacementId={selectedPlacementId}
+        rulerEnabled={rulerEnabled}
+        silhouetteEnabled={silhouetteEnabled}
         onDropPhoto={onDropPhoto}
         onSelectPlacement={onSelectPlacement}
         onClearSelection={onClearSelection}
