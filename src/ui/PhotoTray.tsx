@@ -66,6 +66,11 @@ export default function PhotoTray({
           <li
             key={photo.id}
             data-testid={`tray-photo-${photo.id}`}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData('application/x-tenji-photo', photo.id)
+              e.dataTransfer.effectAllowed = 'copy'
+            }}
             style={{
               border: '1px solid #d0d0d0',
               borderRadius: 4,
@@ -75,6 +80,7 @@ export default function PhotoTray({
               alignItems: 'center',
               justifyContent: 'center',
               background: '#fff',
+              cursor: 'grab',
             }}
           >
             <Thumbnail photo={photo} blobStore={blobStore} />

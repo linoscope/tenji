@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Wall } from '../state/types'
+import type { Wall, Placement, Photo } from '../state/types'
+import type { BlobStore } from '../storage/blobStore'
 import { computeFitScale } from '../geometry/scale'
 import WallView from './WallView'
 
@@ -7,13 +8,31 @@ const MARGIN_PX = 48
 
 type WallStageProps = {
   wall: Wall
+  placements: Placement[]
+  photos: Photo[]
+  blobStore: BlobStore
+  selectedPlacementId: string | null
+  onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
+  onSelectPlacement: (id: string) => void
+  onClearSelection: () => void
+  onMovePlacement: (id: string, xCm: number, yCm: number) => void
 }
 
 /**
  * Measures its own box and renders the wall fit-to-screen inside it, so the
  * whole wall is always visible with margin around it for parking.
  */
-export default function WallStage({ wall }: WallStageProps) {
+export default function WallStage({
+  wall,
+  placements,
+  photos,
+  blobStore,
+  selectedPlacementId,
+  onDropPhoto,
+  onSelectPlacement,
+  onClearSelection,
+  onMovePlacement,
+}: WallStageProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({
     width: window.innerWidth,
@@ -23,8 +42,11 @@ export default function WallStage({ wall }: WallStageProps) {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const measure = () =>
-      setViewport({ width: el.clientWidth, height: el.clientHeight })
+    const measure = () => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      if (w > 0 && h > 0) setViewport({ width: w, height: h })
+    }
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
@@ -52,7 +74,18 @@ export default function WallStage({ wall }: WallStageProps) {
         overflow: 'hidden',
       }}
     >
-      <WallView wall={wall} scale={Number.isFinite(scale) ? scale : 0} />
+      <WallView
+        wall={wall}
+        scale={Number.isFinite(scale) ? scale : 0}
+        placements={placements}
+        photos={photos}
+        blobStore={blobStore}
+        selectedPlacementId={selectedPlacementId}
+        onDropPhoto={onDropPhoto}
+        onSelectPlacement={onSelectPlacement}
+        onClearSelection={onClearSelection}
+        onMovePlacement={onMovePlacement}
+      />
     </div>
   )
 }

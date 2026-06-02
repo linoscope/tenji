@@ -2,12 +2,14 @@ import type { AppState } from './types'
 
 export const DEFAULT_WALL_WIDTH_CM = 800
 export const DEFAULT_WALL_HEIGHT_CM = 250
+/** Default long edge for a freshly placed photo (A3). */
+export const DEFAULT_PLACEMENT_LONG_EDGE_CM = 42
 
 export const initialState: AppState = {
   photos: [],
   walls: [],
   placements: [],
-  ui: { activeWallId: null },
+  ui: { activeWallId: null, selectedPlacementId: null },
 }
 
 export type Action =
@@ -29,6 +31,17 @@ export type Action =
       blobKey: string
       aspectRatio: number
     }
+  | {
+      type: 'placePhoto'
+      id: string
+      photoId: string
+      wallId: string
+      xCm: number
+      yCm: number
+    }
+  | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
+  | { type: 'selectPlacement'; id: string }
+  | { type: 'clearSelection' }
   | { type: 'hydrate'; state: AppState }
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -75,6 +88,32 @@ export function appReducer(state: AppState, action: Action): AppState {
       }
       return { ...state, photos: [...state.photos, photo] }
     }
+    case 'placePhoto': {
+      const placement = {
+        id: action.id,
+        photoId: action.photoId,
+        wallId: action.wallId,
+        xCm: action.xCm,
+        yCm: action.yCm,
+        longEdgeCm: DEFAULT_PLACEMENT_LONG_EDGE_CM,
+      }
+      return {
+        ...state,
+        placements: [...state.placements, placement],
+        ui: { ...state.ui, selectedPlacementId: placement.id },
+      }
+    }
+    case 'movePlacement':
+      return {
+        ...state,
+        placements: state.placements.map((p) =>
+          p.id === action.id ? { ...p, xCm: action.xCm, yCm: action.yCm } : p,
+        ),
+      }
+    case 'selectPlacement':
+      return { ...state, ui: { ...state.ui, selectedPlacementId: action.id } }
+    case 'clearSelection':
+      return { ...state, ui: { ...state.ui, selectedPlacementId: null } }
     case 'deleteWall': {
       const walls = state.walls.filter((w) => w.id !== action.id)
       const placements = state.placements.filter((p) => p.wallId !== action.id)
