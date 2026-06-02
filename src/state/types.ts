@@ -29,5 +29,7 @@ export type AppState = {
   ui: {
     activeWallId: string | null
     selectedPlacementId: string | null
+    rulerEnabled: boolean
+    silhouetteEnabled: boolean
   }
 }

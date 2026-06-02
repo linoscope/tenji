@@ -9,7 +9,12 @@ export const initialState: AppState = {
   photos: [],
   walls: [],
   placements: [],
-  ui: { activeWallId: null, selectedPlacementId: null },
+  ui: {
+    activeWallId: null,
+    selectedPlacementId: null,
+    rulerEnabled: true,
+    silhouetteEnabled: true,
+  },
 }
 
 export type Action =
@@ -45,12 +50,34 @@ export type Action =
   | { type: 'clearSelection' }
   | { type: 'sendPlacementToTray'; id: string }
   | { type: 'deletePhoto'; id: string }
+  | { type: 'toggleRuler' }
+  | { type: 'toggleSilhouette' }
   | { type: 'hydrate'; state: AppState }
 
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'hydrate':
-      return action.state
+    case 'hydrate': {
+      // Backwards-compat: older snapshots may predate the overlay flags.
+      const ui = action.state.ui
+      return {
+        ...action.state,
+        ui: {
+          ...ui,
+          rulerEnabled: ui.rulerEnabled ?? true,
+          silhouetteEnabled: ui.silhouetteEnabled ?? true,
+        },
+      }
+    }
+    case 'toggleRuler':
+      return {
+        ...state,
+        ui: { ...state.ui, rulerEnabled: !state.ui.rulerEnabled },
+      }
+    case 'toggleSilhouette':
+      return {
+        ...state,
+        ui: { ...state.ui, silhouetteEnabled: !state.ui.silhouetteEnabled },
+      }
     case 'createWall': {
       const wall = {
         id: action.id,
