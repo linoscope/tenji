@@ -100,6 +100,16 @@ my machine.
 49. As Jerony, I want to view the table on screen and download it as CSV, so that I can sanity-check it and then email it.
 50. As Jerony, I want tray (unplaced) photos excluded from the print table, so that I'm not asked to print things I'm not showing.
 
+### Tray: placed-photo marking
+
+51. As Jerony, I want already-placed photos to look different from unplaced ones in the tray, so that I can see at a glance what I still have to work with.
+52. As Jerony, I want a placed photo to be dimmed, so that my unplaced candidates visually stand out.
+53. As Jerony, I want a placed photo to show which wall it's on (the wall's name, or "On: N walls" when it's on several), so that I remember where I already hung it.
+54. As Jerony, I want placed photos to sort to the bottom of the tray while unplaced ones keep their order, so that the photos I haven't used yet are easiest to reach.
+55. As Jerony, I want a photo marked placed if it's on any wall (not just the active one), so that the "have I used this?" signal is about the whole show.
+56. As Jerony, I want a placed photo to remain draggable from the tray, so that I can place the same photo on another wall to compare arrangements.
+57. As Jerony, I want a photo to revert to the unplaced look as soon as its last placement is removed (dragged off, sent to tray, or its placement/wall deleted), so that the tray always reflects reality.
+
 ## Implementation Decisions
 
 ### Architecture & stack
@@ -130,6 +140,17 @@ my machine.
 ### Print-shop table
 - A pure function aggregates `placements` across all walls into rows grouped by `(photoId, longEdgeCm)`, each row carrying `count`, the set of wall names, derived W×H cm, size label (matched preset name or "Custom"), orientation, filename, and thumbnail reference. Tray-only photos are excluded. CSV is generated from these rows (thumbnail omitted from CSV).
 
+### Tray view (placed-photo marking)
+- The tray shows **every** imported photo (placement is visual state, never removal). A pure
+  function — mirroring the print-shop aggregator — takes `{ photos, placements, walls }` and
+  returns an **ordered list of tray items**, each carrying the photo, a `placed` flag, and the
+  deduplicated wall names it sits on (in wall order). Unplaced items come first in photo order;
+  placed items sort to the bottom. The tray component only renders this derived list.
+- "Placed" means **≥1 placement on any wall**. Caption: none when unplaced; the wall name when
+  on exactly one wall; "On: N walls" when on two or more. Placed items stay draggable.
+- Derived entirely from existing state, so it updates automatically on place / move / send-to-tray
+  / delete-photo / delete-wall with no schema change.
+
 ### Import behaviour
 - File picker and clipboard paste add photos to the **tray**.
 - Dragging an image file directly onto a wall imports it **and** places it at the drop point at the default size (A3).
@@ -143,13 +164,17 @@ my machine.
 - **Sizing module.** Test `(longEdgeCm, aspectRatio)` → dimensions/orientation across portrait, landscape, and square inputs, and that each preset yields the expected long edge.
 - **Geometry module.** Test fit-to-screen scale for assorted wall/viewport ratios; test that alignment guides activate exactly when edges/centers coincide within tolerance and that snap deltas are correct; test gap measurement.
 - **Print-table module.** Test grouping by `(photoId, size)` with correct counts and wall lists, "Custom" vs preset labelling, exclusion of tray photos, and CSV row generation.
+- **Tray-view module.** Test the derived ordering (unplaced first in photo order, placed sunk to the bottom), the `placed` flag, deduplicated wall-name lists, the single-wall name vs "On: N walls" caption rule, and graceful handling of placements referencing a missing photo/wall (consistent with the print-table aggregator). One RTL check that a placed tray photo renders dimmed, shows its caption, and stays draggable.
 - **Persistence seam.** Define a small storage port (save/load) and test serialization round-trips against an in-memory fake, so tests don't depend on real IndexedDB.
 - **Deliberately not unit-tested:** low-level drag pointer choreography (react-rnd's responsibility) — the app-specific geometry it feeds is tested directly instead. A small number of RTL smoke tests may cover the inspector (changing a preset updates the displayed size).
 - **Prior art:** none — greenfield. These conventions establish the prior art for future tests.
 
 ## Out of Scope
 
-- Zoom and pan (v1 is fit-to-screen only).
+- Removing placed photos from the tray entirely — rejected in favour of marking them (they stay, dimmed).
+- Setting custom width AND height independently — considered and dropped; long-edge sizing already covers the need (no matting or cropping).
+- Per-active-wall tray membership, and any physical-wall-vs-layout-option distinction.
+- Zoom and pan (fit-to-screen only; considered again and still deferred).
 - Multi-select and group move/align.
 - Snap-to-grid (alignment guides only).
 - Photo rotation / hanging a print at an angle.
