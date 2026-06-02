@@ -1353,4 +1353,163 @@ describe('App', () => {
     )
     expect(text).toContain('sunset.jpg,A3,42,28,landscape,1,North Wall')
   })
+
+  it('marks a placed tray photo: dimmed, captioned with the wall name, still draggable', async () => {
+    const seeded = {
+      photos: [
+        { id: 'placed-photo', filename: 'placed.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
+        { id: 'tray-only', filename: 'tray.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'placed-photo',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: null,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const placedTile = await screen.findByTestId('tray-photo-placed-photo')
+    expect(placedTile).toHaveAttribute('data-placed', 'true')
+    // Dimmed when placed.
+    expect(placedTile).toHaveStyle({ opacity: '0.5' })
+    // Caption shows the single wall name.
+    expect(
+      screen.getByTestId('tray-caption-placed-photo'),
+    ).toHaveTextContent('North Wall')
+    // Still draggable so the user can place it again on another wall.
+    expect(placedTile).toHaveAttribute('draggable', 'true')
+
+    // Unplaced tile is not dimmed and has no caption.
+    const trayOnly = screen.getByTestId('tray-photo-tray-only')
+    expect(trayOnly).toHaveAttribute('data-placed', 'false')
+    expect(trayOnly).toHaveStyle({ opacity: '1' })
+    expect(
+      screen.queryByTestId('tray-caption-tray-only'),
+    ).not.toBeInTheDocument()
+  })
+
+  it("captions a placed tray photo as 'On: N walls' when it spans multiple walls", async () => {
+    const seeded = {
+      photos: [
+        { id: 'multi-photo', filename: 'multi.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'multi-photo',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'multi-photo',
+          wallId: 'w2',
+          xCm: 200,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: null,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('tray-photo-multi-photo')
+    expect(
+      screen.getByTestId('tray-caption-multi-photo'),
+    ).toHaveTextContent('On: 2 walls')
+  })
+
+  it('reverts a placed tray photo to the unplaced look when its last placement is removed', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'p1.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: 'pl-1',
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const tile = await screen.findByTestId('tray-photo-photo-1')
+    expect(tile).toHaveAttribute('data-placed', 'true')
+
+    // Inspector is open because the placement is selected; sending to tray
+    // removes the last placement.
+    await user.click(screen.getByRole('button', { name: /send to tray/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('tray-photo-photo-1'),
+      ).toHaveAttribute('data-placed', 'false')
+    })
+    expect(
+      screen.queryByTestId('tray-caption-photo-1'),
+    ).not.toBeInTheDocument()
+  })
 })

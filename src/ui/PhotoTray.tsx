@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Photo } from '../state/types'
 import type { BlobStore } from '../storage/blobStore'
+import type { TrayItem } from '../tray/trayView'
 
 type PhotoTrayProps = {
-  photos: Photo[]
+  items: TrayItem[]
   blobStore: BlobStore
   onImportFiles: (files: FileList | File[]) => void
 }
 
 export default function PhotoTray({
-  photos,
+  items,
   blobStore,
   onImportFiles,
 }: PhotoTrayProps) {
@@ -62,33 +63,88 @@ export default function PhotoTray({
           gap: 6,
         }}
       >
-        {photos.map((photo) => (
-          <li
-            key={photo.id}
-            data-testid={`tray-photo-${photo.id}`}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('application/x-tenji-photo', photo.id)
-              e.dataTransfer.effectAllowed = 'copy'
-            }}
-            style={{
-              border: '1px solid #d0d0d0',
-              borderRadius: 4,
-              overflow: 'hidden',
-              aspectRatio: '1 / 1',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: '#fff',
-              cursor: 'grab',
-            }}
-          >
-            <Thumbnail photo={photo} blobStore={blobStore} />
-          </li>
+        {items.map((item) => (
+          <TrayPhoto
+            key={item.photo.id}
+            item={item}
+            blobStore={blobStore}
+          />
         ))}
       </ul>
     </section>
   )
+}
+
+function TrayPhoto({
+  item,
+  blobStore,
+}: {
+  item: TrayItem
+  blobStore: BlobStore
+}) {
+  const { photo, placed, wallNames } = item
+  const caption = placedCaption(wallNames)
+  return (
+    <li
+      data-testid={`tray-photo-${photo.id}`}
+      data-placed={placed ? 'true' : 'false'}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-tenji-photo', photo.id)
+        e.dataTransfer.effectAllowed = 'copy'
+      }}
+      style={{
+        border: '1px solid #d0d0d0',
+        borderRadius: 4,
+        overflow: 'hidden',
+        aspectRatio: '1 / 1',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'center',
+        background: '#fff',
+        cursor: 'grab',
+        opacity: placed ? 0.5 : 1,
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <Thumbnail photo={photo} blobStore={blobStore} />
+      </div>
+      {caption ? (
+        <div
+          data-testid={`tray-caption-${photo.id}`}
+          style={{
+            fontSize: 9,
+            lineHeight: 1.2,
+            padding: '2px 4px',
+            color: '#fff',
+            background: 'rgba(0,0,0,0.55)',
+            textAlign: 'center',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {caption}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+function placedCaption(wallNames: string[]): string | null {
+  if (wallNames.length === 0) return null
+  if (wallNames.length === 1) return wallNames[0]
+  return `On: ${wallNames.length} walls`
 }
 
 function Thumbnail({

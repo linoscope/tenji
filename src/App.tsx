@@ -18,6 +18,7 @@ import WallStage from './ui/WallStage'
 import PhotoTray from './ui/PhotoTray'
 import PlacementInspector from './ui/PlacementInspector'
 import PrintShop from './ui/PrintShop'
+import { computeTrayItems } from './tray/trayView'
 
 type AppProps = {
   port?: StatePort
@@ -259,7 +260,11 @@ export default function App({
           />
         ) : null}
         <PhotoTray
-          photos={state.photos}
+          items={computeTrayItems({
+            photos: state.photos,
+            placements: state.placements,
+            walls: state.walls,
+          })}
           blobStore={blobStoreRef.current}
           onImportFiles={importFiles}
         />
