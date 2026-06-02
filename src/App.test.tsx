@@ -870,6 +870,197 @@ describe('App', () => {
     )
   })
 
+  it('parks a placement free-positioned in the margin when dragged outside the wall', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const placement = await screen.findByTestId('placement-pl-1')
+
+    // Drag far enough to the left that the placement center goes outside the
+    // wall (negative xCm). The reducer must accept the parked position.
+    fireEvent.mouseDown(placement, { clientX: 100, clientY: 100 })
+    fireEvent.mouseMove(window, { clientX: -300, clientY: 100 })
+    fireEvent.mouseUp(window, { clientX: -300, clientY: 100 })
+
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-pl-1')
+      expect(Number(after.getAttribute('data-x-cm'))).toBeLessThan(0)
+    })
+  })
+
+  it('sends a placement to the tray via the inspector (placement removed, photo kept)', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-inspector')
+
+    await user.click(screen.getByRole('button', { name: /send to tray/i }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('placement-pl-1')).not.toBeInTheDocument(),
+    )
+    // Photo remains in the tray.
+    expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument()
+    // Inspector goes away because nothing is selected.
+    expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument()
+  })
+
+  it('deletes a photo (and all its placements across walls) via the inspector', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'East Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'photo-1',
+          wallId: 'w2',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-3',
+          photoId: 'photo-2',
+          wallId: 'w1',
+          xCm: 300,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-inspector')
+
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    // Photo gone from tray.
+    await waitFor(() =>
+      expect(screen.queryByTestId('tray-photo-photo-1')).not.toBeInTheDocument(),
+    )
+    // Both placements of photo-1 gone, across both walls.
+    expect(screen.queryByTestId('placement-pl-1')).not.toBeInTheDocument()
+    // Other photo + placement still present.
+    expect(screen.getByTestId('tray-photo-photo-2')).toBeInTheDocument()
+    expect(screen.getByTestId('placement-pl-3')).toBeInTheDocument()
+  })
+
+  it('persists a parked placement (out-of-bounds position) across reload', async () => {
+    const port = createMemoryStatePort({
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: -40,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    })
+    const blobStore = createMemoryBlobStore()
+    const { unmount } = render(
+      <App
+        port={port}
+        blobStore={blobStore}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const placement = await screen.findByTestId('placement-pl-1')
+    expect(Number(placement.getAttribute('data-x-cm'))).toBe(-40)
+
+    unmount()
+
+    render(
+      <App
+        port={port}
+        blobStore={blobStore}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const restored = await screen.findByTestId('placement-pl-1')
+    expect(Number(restored.getAttribute('data-x-cm'))).toBe(-40)
+  })
+
   it('snaps a near-center drag to the other photo center-Y on release', async () => {
     // Two placements whose Y centers differ by 1 cm. A drag that just nudges
     // the dragged one (no significant Y movement, but enough X to commit)

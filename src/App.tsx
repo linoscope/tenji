@@ -201,6 +201,15 @@ export default function App({
                 longEdgeCm,
               })
             }
+            onSendToTray={() =>
+              dispatch({
+                type: 'sendPlacementToTray',
+                id: selectedPlacement.id,
+              })
+            }
+            onDeletePhoto={() =>
+              dispatch({ type: 'deletePhoto', id: selectedPhoto.id })
+            }
           />
         ) : null}
         <PhotoTray

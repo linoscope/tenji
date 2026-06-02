@@ -9,6 +9,8 @@ type PlacementInspectorProps = {
   placement: Placement
   photo: Photo
   onResize: (longEdgeCm: number) => void
+  onSendToTray: () => void
+  onDeletePhoto: () => void
 }
 
 const ROUND = (n: number) => Math.round(n * 10) / 10
@@ -17,6 +19,8 @@ export default function PlacementInspector({
   placement,
   photo,
   onResize,
+  onSendToTray,
+  onDeletePhoto,
 }: PlacementInspectorProps) {
   const size = computeSizeFromLongEdge(placement.longEdgeCm, photo.aspectRatio)
   const label = resolveSizeLabel(placement.longEdgeCm)
@@ -72,6 +76,37 @@ export default function PlacementInspector({
           }}
         />
       </label>
+      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={onSendToTray}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #c0c0c0',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          Send to tray
+        </button>
+        <button
+          type="button"
+          onClick={onDeletePhoto}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #d0d0d0',
+            background: 'transparent',
+            color: '#a11',
+            cursor: 'pointer',
+          }}
+        >
+          Delete
+        </button>
+      </div>
     </section>
   )
 }
