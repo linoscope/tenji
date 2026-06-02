@@ -100,7 +100,7 @@ describe('resizeWall', () => {
           longEdgeCm: 40,
         },
       ],
-      ui: { activeWallId: 'w1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
     }
 
     const shrunk = appReducer(seeded, {
@@ -172,6 +172,150 @@ describe('addPhoto', () => {
   })
 })
 
+describe('placePhoto', () => {
+  it('creates a placement at the default A3 long edge (42 cm) on the given wall', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'placePhoto',
+      id: 'pl-1',
+      photoId: 'photo-1',
+      wallId: 'w1',
+      xCm: 100,
+      yCm: 80,
+    })
+
+    expect(after.placements).toHaveLength(1)
+    expect(after.placements[0]).toMatchObject({
+      id: 'pl-1',
+      photoId: 'photo-1',
+      wallId: 'w1',
+      xCm: 100,
+      yCm: 80,
+      longEdgeCm: 42,
+    })
+  })
+
+  it('selects the newly placed photo', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'placePhoto',
+      id: 'pl-1',
+      photoId: 'photo-1',
+      wallId: 'w1',
+      xCm: 100,
+      yCm: 80,
+    })
+
+    expect(after.ui.selectedPlacementId).toBe('pl-1')
+  })
+})
+
+describe('movePlacement', () => {
+  it('updates xCm and yCm of the matching placement', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'movePlacement',
+      id: 'pl-1',
+      xCm: 250,
+      yCm: 120,
+    })
+
+    expect(after.placements[0]).toMatchObject({ xCm: 250, yCm: 120 })
+  })
+
+  it('leaves other placements unchanged', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'photo-2',
+          wallId: 'w1',
+          xCm: 200,
+          yCm: 90,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'movePlacement',
+      id: 'pl-1',
+      xCm: 300,
+      yCm: 150,
+    })
+
+    expect(after.placements[1]).toMatchObject({ xCm: 200, yCm: 90 })
+  })
+})
+
+describe('selectPlacement', () => {
+  it('sets the selected placement id', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, { type: 'selectPlacement', id: 'pl-1' })
+
+    expect(after.ui.selectedPlacementId).toBe('pl-1')
+  })
+
+  it('clearSelection sets the selected placement id to null', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1' },
+    }
+
+    const after = appReducer(seeded, { type: 'clearSelection' })
+
+    expect(after.ui.selectedPlacementId).toBeNull()
+  })
+})
+
 describe('deleteWall', () => {
   it('removes the wall with the given id', () => {
     const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
@@ -194,7 +338,7 @@ describe('deleteWall', () => {
         { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, longEdgeCm: 40 },
         { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, longEdgeCm: 40 },
       ],
-      ui: { activeWallId: 'w1' },
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
     }
 
     const after = appReducer(seeded, { type: 'deleteWall', id: 'w1' })

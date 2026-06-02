@@ -188,7 +188,32 @@ export default function App({
           onImportFiles={importFiles}
         />
       </aside>
-      {activeWall ? <WallStage wall={activeWall} /> : null}
+      {activeWall ? (
+        <WallStage
+          wall={activeWall}
+          placements={state.placements.filter((p) => p.wallId === activeWall.id)}
+          photos={state.photos}
+          blobStore={blobStoreRef.current}
+          selectedPlacementId={state.ui.selectedPlacementId}
+          onDropPhoto={({ photoId, xCm, yCm }) =>
+            dispatch({
+              type: 'placePhoto',
+              id: createId(),
+              photoId,
+              wallId: activeWall.id,
+              xCm,
+              yCm,
+            })
+          }
+          onSelectPlacement={(id) =>
+            dispatch({ type: 'selectPlacement', id })
+          }
+          onClearSelection={() => dispatch({ type: 'clearSelection' })}
+          onMovePlacement={(id, xCm, yCm) =>
+            dispatch({ type: 'movePlacement', id, xCm, yCm })
+          }
+        />
+      ) : null}
     </div>
   )
 }

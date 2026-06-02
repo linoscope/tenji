@@ -28,5 +28,6 @@ export type AppState = {
   placements: Placement[]
   ui: {
     activeWallId: string | null
+    selectedPlacementId: string | null
   }
 }
