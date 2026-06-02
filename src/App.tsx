@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { appReducer, initialState } from './state/reducer'
 import type { StatePort } from './storage/port'
 import { createIdbStatePort } from './storage/idbStatePort'
@@ -10,6 +10,10 @@ import {
   decodeImage as browserDecodeImage,
   downscale as browserDownscale,
 } from './photo/browserImageOps'
+import type { ExportPort } from './export/exportPort'
+import { createHtmlToImageExportPort } from './export/exportPort'
+import { triggerBlobDownload } from './export/download'
+import { wallExportFilename } from './export/filename'
 import WallStage from './ui/WallStage'
 import PhotoTray from './ui/PhotoTray'
 import PlacementInspector from './ui/PlacementInspector'
@@ -19,6 +23,8 @@ type AppProps = {
   blobStore?: BlobStore
   createId?: () => string
   imageOps?: { decodeImage: DecodeImage; downscale: Downscale }
+  exportPort?: ExportPort
+  downloadBlob?: (blob: Blob, filename: string) => void
 }
 
 const defaultCreateId = () =>
@@ -31,13 +37,20 @@ export default function App({
   blobStore,
   createId = defaultCreateId,
   imageOps,
+  exportPort,
+  downloadBlob = triggerBlobDownload,
 }: AppProps) {
   const portRef = useRef<StatePort>(port ?? createIdbStatePort())
   const blobStoreRef = useRef<BlobStore>(blobStore ?? createIdbBlobStore())
+  const exportPortRef = useRef<ExportPort>(
+    exportPort ?? createHtmlToImageExportPort(),
+  )
+  const wallRef = useRef<HTMLElement | null>(null)
   const decodeImage = imageOps?.decodeImage ?? browserDecodeImage
   const downscale = imageOps?.downscale ?? browserDownscale
   const [state, dispatch] = useReducer(appReducer, initialState)
   const [hydrated, setHydrated] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // Load saved state once; if there is nothing to restore, start with a wall.
   useEffect(() => {
@@ -106,6 +119,23 @@ export default function App({
     return () => window.removeEventListener('paste', onPaste)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const exportActiveWall = useCallback(async () => {
+    if (!activeWall) return
+    const el = wallRef.current
+    if (!el) return
+    setExporting(true)
+    // Clear selection so resize handles/outline don't bake into the image.
+    dispatch({ type: 'clearSelection' })
+    // Wait one paint so the re-rendered (handle-free) wall is what we capture.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    try {
+      const blob = await exportPortRef.current.exportElement(el)
+      downloadBlob(blob, wallExportFilename(activeWall.name))
+    } finally {
+      setExporting(false)
+    }
+  }, [activeWall, downloadBlob])
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -195,6 +225,15 @@ export default function App({
           onToggleRuler={() => dispatch({ type: 'toggleRuler' })}
           onToggleSilhouette={() => dispatch({ type: 'toggleSilhouette' })}
         />
+        {activeWall ? (
+          <button
+            type="button"
+            onClick={() => void exportActiveWall()}
+            disabled={exporting}
+          >
+            {exporting ? 'Exporting…' : 'Export PNG'}
+          </button>
+        ) : null}
         {selectedPlacement && selectedPhoto ? (
           <PlacementInspector
             key={selectedPlacement.id}
@@ -227,6 +266,7 @@ export default function App({
       {activeWall ? (
         <WallStage
           wall={activeWall}
+          wallRef={wallRef}
           placements={state.placements.filter((p) => p.wallId === activeWall.id)}
           photos={state.photos}
           blobStore={blobStoreRef.current}

@@ -16,6 +16,7 @@ import PlacementView from './PlacementView'
 
 type WallViewProps = {
   wall: Wall
+  wallRef?: React.MutableRefObject<HTMLElement | null>
   scale: number
   placements: Placement[]
   photos: Photo[]
@@ -59,6 +60,7 @@ function placementToRect(
 /** The wall itself, drawn to scale on a plain white background. */
 export default function WallView({
   wall,
+  wallRef,
   scale,
   placements,
   photos,
@@ -172,6 +174,9 @@ export default function WallView({
       data-testid="wall"
       data-width-cm={wall.widthCm}
       data-height-cm={wall.heightCm}
+      ref={(node) => {
+        if (wallRef) wallRef.current = node
+      }}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onMouseDown={onWallMouseDown}
