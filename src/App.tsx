@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { appReducer, initialState } from './state/reducer'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { initialState } from './state/reducer'
+import {
+  createHistoryState,
+  historyReducer,
+  type HistoryAction,
+  type HistoryState,
+} from './state/history'
 import type { StatePort } from './storage/port'
 import { createIdbStatePort } from './storage/idbStatePort'
 import type { BlobStore } from './storage/blobStore'
@@ -44,6 +50,8 @@ type AppProps = {
     now: () => Date
   }
   confirmReplace?: (message: string) => boolean
+  /** Injected clock for history coalescing (ms timestamps). */
+  historyNow?: () => number
 }
 
 const REPLACE_PROMPT = 'Importing replaces your current plan. Continue?'
@@ -78,6 +86,7 @@ export default function App({
     typeof window !== 'undefined' && typeof window.confirm === 'function'
       ? window.confirm(msg)
       : true,
+  historyNow,
 }: AppProps) {
   const portRef = useRef<StatePort>(port ?? createIdbStatePort())
   const blobStoreRef = useRef<BlobStore>(blobStore ?? createIdbBlobStore())
@@ -90,7 +99,18 @@ export default function App({
   const blobToBase64 = projectIo?.blobToBase64 ?? browserBlobToBase64
   const base64ToBlob = projectIo?.base64ToBlob ?? browserBase64ToBlob
   const projectNowRef = useRef<() => Date>(projectIo?.now ?? (() => new Date()))
-  const [state, dispatch] = useReducer(appReducer, initialState)
+  const historyNowRef = useRef<() => number>(historyNow ?? (() => Date.now()))
+  const wrappedReducer = useMemo(
+    () => (s: HistoryState, a: HistoryAction) =>
+      historyReducer(s, a, historyNowRef.current),
+    [],
+  )
+  const [history, dispatch] = useReducer(
+    wrappedReducer,
+    initialState,
+    createHistoryState,
+  )
+  const state = history.present
   const [hydrated, setHydrated] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [projectBusy, setProjectBusy] = useState(false)
@@ -145,7 +165,8 @@ export default function App({
     }
   }
 
-  // Keyboard: Delete/Backspace deletes the selection, Escape clears it.
+  // Keyboard: Delete/Backspace deletes the selection, Escape clears it,
+  // ⌘/Ctrl+Z undoes, ⌘⇧Z / Ctrl+Y / Ctrl+Shift+Z redoes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Don't swallow keys when the user is typing in an input/textarea/contenteditable.
@@ -153,6 +174,17 @@ export default function App({
       if (target) {
         const tag = target.tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      }
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        dispatch(e.shiftKey ? { type: 'redo' } : { type: 'undo' })
+        return
+      }
+      if (mod && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault()
+        dispatch({ type: 'redo' })
+        return
       }
       if (selectionCount === 0) return
       if (e.key === 'Delete' || e.key === 'Backspace') {

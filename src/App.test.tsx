@@ -2106,6 +2106,259 @@ describe('App', () => {
     })
   })
 
+  describe('undo / redo', () => {
+    function seededWithPlacement() {
+      return {
+        photos: [
+          { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        ],
+        walls: [
+          { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        ],
+        placements: [
+          {
+            id: 'pl-1',
+            photoId: 'photo-1',
+            wallId: 'w1',
+            xCm: 100,
+            yCm: 100,
+            longEdgeCm: 42,
+          },
+        ],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: [] as string[],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+    }
+
+    it('⌘Z undoes a move and the redo combo re-applies it', async () => {
+      const seeded = seededWithPlacement()
+      let t = 1000
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          historyNow={() => (t += 10_000)}
+        />,
+      )
+
+      const wall = (await screen.findByTestId('wall')) as HTMLElement
+      wall.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 500,
+          bottom: 300,
+          width: 500,
+          height: 300,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect
+
+      const placement = await screen.findByTestId('placement-pl-1')
+      const initialX = Number(placement.getAttribute('data-x-cm'))
+
+      // Drag the placement: mouseDown then move 50 px right then up.
+      fireEvent.mouseDown(placement, { clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 150, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
+
+      await waitFor(() => {
+        const after = screen.getByTestId('placement-pl-1')
+        expect(Number(after.getAttribute('data-x-cm'))).toBeGreaterThan(
+          initialX,
+        )
+      })
+      const movedX = Number(
+        screen.getByTestId('placement-pl-1').getAttribute('data-x-cm'),
+      )
+
+      // ⌘Z to undo.
+      fireEvent.keyDown(window, { key: 'z', metaKey: true })
+      await waitFor(() => {
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBe(initialX)
+      })
+
+      // ⌘⇧Z to redo.
+      fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true })
+      await waitFor(() => {
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBe(movedX)
+      })
+    })
+
+    it('Ctrl+Y also redoes', async () => {
+      const seeded = seededWithPlacement()
+      let t = 1000
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          historyNow={() => (t += 10_000)}
+        />,
+      )
+
+      const wall = (await screen.findByTestId('wall')) as HTMLElement
+      wall.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 500,
+          bottom: 300,
+          width: 500,
+          height: 300,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect
+
+      const placement = await screen.findByTestId('placement-pl-1')
+      const initialX = Number(placement.getAttribute('data-x-cm'))
+      fireEvent.mouseDown(placement, { clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 150, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
+      await waitFor(() =>
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBeGreaterThan(initialX),
+      )
+      const movedX = Number(
+        screen.getByTestId('placement-pl-1').getAttribute('data-x-cm'),
+      )
+
+      fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+      await waitFor(() =>
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBe(initialX),
+      )
+
+      fireEvent.keyDown(window, { key: 'y', ctrlKey: true })
+      await waitFor(() =>
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBe(movedX),
+      )
+    })
+
+    it('undo/redo shortcuts are ignored while focus is in a text input', async () => {
+      const user = userEvent.setup()
+      const seeded = seededWithPlacement()
+      let t = 1000
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          historyNow={() => (t += 10_000)}
+        />,
+      )
+
+      const wall = (await screen.findByTestId('wall')) as HTMLElement
+      wall.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 500,
+          bottom: 300,
+          width: 500,
+          height: 300,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect
+
+      // Make a real edit so an undo would be possible if the shortcut fired.
+      const placement = await screen.findByTestId('placement-pl-1')
+      const initialX = Number(placement.getAttribute('data-x-cm'))
+      fireEvent.mouseDown(placement, { clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 150, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
+      await waitFor(() =>
+        expect(
+          Number(
+            screen
+              .getByTestId('placement-pl-1')
+              .getAttribute('data-x-cm'),
+          ),
+        ).toBeGreaterThan(initialX),
+      )
+      const movedX = Number(
+        screen.getByTestId('placement-pl-1').getAttribute('data-x-cm'),
+      )
+
+      // Focus the wall-name input and fire ⌘Z from there.
+      const nameInput = screen.getByLabelText(/wall name/i)
+      await user.click(nameInput)
+      fireEvent.keyDown(nameInput, { key: 'z', metaKey: true })
+
+      // The placement x should NOT have rolled back.
+      expect(
+        Number(
+          screen.getByTestId('placement-pl-1').getAttribute('data-x-cm'),
+        ),
+      ).toBe(movedX)
+    })
+
+    it('hydrating from saved state starts with empty history (no initial undo)', async () => {
+      const seeded = seededWithPlacement()
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const placement = await screen.findByTestId('placement-pl-1')
+      const initialX = Number(placement.getAttribute('data-x-cm'))
+
+      // No edits since hydrate; ⌘Z should be a no-op.
+      fireEvent.keyDown(window, { key: 'z', metaKey: true })
+
+      // Give React a tick.
+      await new Promise((r) => setTimeout(r, 0))
+      expect(
+        Number(
+          screen.getByTestId('placement-pl-1').getAttribute('data-x-cm'),
+        ),
+      ).toBe(initialX)
+    })
+  })
+
   it('switching the active wall clears the selection', async () => {
     const user = userEvent.setup()
     const seeded = {
