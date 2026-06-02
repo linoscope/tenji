@@ -1201,7 +1201,7 @@ describe('App', () => {
       />,
     )
 
-    await screen.findByText('North Wall')
+    await screen.findByRole('button', { name: /north wall/i })
 
     await user.click(screen.getByRole('button', { name: /export png/i }))
 
@@ -1232,5 +1232,125 @@ describe('App', () => {
       expect(screen.queryByTestId('overlay-silhouette')).not.toBeInTheDocument(),
     )
     expect(screen.queryByTestId('overlay-floor')).not.toBeInTheDocument()
+  })
+
+  it('shows a print-shop table with one row per (photo, size), excluding tray-only photos', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'sunset.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
+        { id: 'photo-2', filename: 'tray-only.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'photo-1',
+          wallId: 'w2',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: null,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+
+    const table = await screen.findByTestId('print-shop-table')
+    const rows = table.querySelectorAll('[data-testid^="print-row-"]')
+    expect(rows).toHaveLength(1)
+
+    const row = screen.getByTestId('print-row-photo-1-42')
+    expect(row).toHaveTextContent('sunset.jpg')
+    expect(row).toHaveTextContent('A3')
+    expect(row).toHaveTextContent('42')
+    expect(row).toHaveTextContent('28')
+    expect(row).toHaveTextContent('landscape')
+    expect(row).toHaveTextContent('North Wall')
+    expect(row).toHaveTextContent('South Wall')
+    // Count = 2 (placed on both walls).
+    expect(row.querySelector('[data-cell="count"]')?.textContent).toBe('2')
+
+    // Tray-only photo is excluded from the print-shop table.
+    expect(table).not.toHaveTextContent('tray-only.jpg')
+  })
+
+  it('downloads a CSV file with one row per (photo, size) when CSV is clicked', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'sunset.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: null,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+
+    const downloaded: Array<{ blob: Blob; filename: string }> = []
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+        downloadBlob={(blob, filename) => downloaded.push({ blob, filename })}
+      />,
+    )
+
+    await screen.findByRole('button', { name: /north wall/i })
+    await user.click(screen.getByRole('button', { name: /download csv/i }))
+
+    expect(downloaded).toHaveLength(1)
+    expect(downloaded[0].filename).toBe('print-list.csv')
+    expect(downloaded[0].blob.type).toMatch(/csv/)
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(reader.error)
+      reader.onload = () => resolve(reader.result as string)
+      reader.readAsText(downloaded[0].blob)
+    })
+    expect(text).toContain(
+      'Filename,Size,Width (cm),Height (cm),Orientation,Count,Walls',
+    )
+    expect(text).toContain('sunset.jpg,A3,42,28,landscape,1,North Wall')
   })
 })
