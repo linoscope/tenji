@@ -757,4 +757,158 @@ describe('App', () => {
     const wall = screen.getByTestId('wall')
     expect(wall).toHaveAttribute('data-width-cm', '500')
   })
+
+  it('flags overlapping placements visually (without preventing the overlap)', async () => {
+    // Two placements at the same spot — they overlap.
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 110, yCm: 150, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const a = await screen.findByTestId('placement-pl-a')
+    const b = await screen.findByTestId('placement-pl-b')
+    expect(a).toHaveAttribute('data-overlapping', 'true')
+    expect(b).toHaveAttribute('data-overlapping', 'true')
+  })
+
+  it('does not flag overlap when placements are clearly apart', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 400, yCm: 250, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const a = await screen.findByTestId('placement-pl-a')
+    const b = await screen.findByTestId('placement-pl-b')
+    expect(a).toHaveAttribute('data-overlapping', 'false')
+    expect(b).toHaveAttribute('data-overlapping', 'false')
+  })
+
+  it('shows alignment guides and a gap label while dragging a placement', async () => {
+    // Two placements whose centers align horizontally; drag one near the other.
+    // Wall height is 302 (center=151) so the sibling-center guide wins over
+    // the wall-center guide when the dragged y is 150.
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 302 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const placementA = await screen.findByTestId('placement-pl-a')
+
+    // Start drag; while held, a sibling-center-horizontal guide should appear
+    // because the dragged center-Y (150) equals the other's center-Y (150).
+    fireEvent.mouseDown(placementA, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(window, { clientX: 1, clientY: 0 })
+
+    await waitFor(() => {
+      const wall = screen.getByTestId('wall')
+      const guides = wall.querySelectorAll('[data-testid^="guide-"]')
+      // Helpful diagnostic if it fails.
+      expect(
+        Array.from(guides).map((g) => g.getAttribute('data-testid')),
+      ).toContain('guide-sibling-center-horizontal')
+    })
+    // A gap label to pl-b should also be shown (they're at the same y, on a
+    // shared horizontal line, with a horizontal gap between them).
+    expect(screen.getByTestId('gap-pl-b')).toBeInTheDocument()
+
+    fireEvent.mouseUp(window)
+    // Guides go away after the drag ends.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('guide-sibling-center-horizontal'),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
+  it('snaps a near-center drag to the other photo center-Y on release', async () => {
+    // Two placements whose Y centers differ by 1 cm. A drag that just nudges
+    // the dragged one (no significant Y movement, but enough X to commit)
+    // should still snap Y to the neighbour's center within tolerance.
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        // pl-a center-Y = 150
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
+        // pl-b center-Y = 150.5 → within 1cm tolerance of pl-a's 150
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150.5, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const placementB = await screen.findByTestId('placement-pl-b')
+    expect(Number(placementB.getAttribute('data-y-cm'))).toBeCloseTo(150.5)
+
+    // Drag pl-b a small distance horizontally; Y unchanged → still within
+    // tolerance of pl-a's 150, so on release pl-b snaps to y=150.
+    fireEvent.mouseDown(placementB, { clientX: 100, clientY: 100 })
+    fireEvent.mouseMove(window, { clientX: 120, clientY: 100 })
+    fireEvent.mouseUp(window, { clientX: 120, clientY: 100 })
+
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-pl-b')
+      expect(Number(after.getAttribute('data-y-cm'))).toBeCloseTo(150)
+    })
+  })
 })

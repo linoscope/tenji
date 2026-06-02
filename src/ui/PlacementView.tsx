@@ -10,7 +10,22 @@ type PlacementViewProps = {
   scale: number
   blobStore: BlobStore
   selected: boolean
+  /** Visual flag when this placement overlaps another. */
+  overlapping?: boolean
+  /**
+   * Center in cm to render at. Defaults to the placement's stored x/y; the
+   * parent overrides this with the snapped position while dragging.
+   */
+  renderXCm?: number
+  renderYCm?: number
   onSelect: () => void
+  /** Fires on mousedown so the parent can register the active drag. */
+  onMoveStart?: (id: string) => void
+  /** Fires on every mousemove with the raw (un-snapped) cursor position in cm. */
+  onMoveUpdate?: (id: string, xCm: number, yCm: number) => void
+  /** Fires once on mouseup, with whatever final cm the parent wants committed. */
+  onMoveEnd?: (id: string) => void
+  /** Fallback for tests that don't use the parent-driven snap pipeline. */
   onMove: (xCm: number, yCm: number) => void
   onResize: (longEdgeCm: number) => void
 }
@@ -26,7 +41,13 @@ export default function PlacementView({
   scale,
   blobStore,
   selected,
+  overlapping = false,
+  renderXCm,
+  renderYCm,
   onSelect,
+  onMoveStart,
+  onMoveUpdate,
+  onMoveEnd,
   onMove,
   onResize,
 }: PlacementViewProps) {
@@ -44,35 +65,41 @@ export default function PlacementView({
   const heightPx = cmToPx(size.heightCm, scale)
 
   // Move-drag.
-  const [dragOffsetPx, setDragOffsetPx] = useState<{ x: number; y: number } | null>(
-    null,
-  )
+  const [dragging, setDragging] = useState(false)
   const dragStateRef = useRef<{
     startClientX: number
     startClientY: number
     startXCm: number
     startYCm: number
+    lastRawXCm: number
+    lastRawYCm: number
   } | null>(null)
 
   useEffect(() => {
-    if (!dragOffsetPx) return
+    if (!dragging) return
     const onMove_ = (e: MouseEvent) => {
-      const s = dragStateRef.current
-      if (!s) return
-      setDragOffsetPx({
-        x: e.clientX - s.startClientX,
-        y: e.clientY - s.startClientY,
-      })
-    }
-    const onUp = (e: MouseEvent) => {
       const s = dragStateRef.current
       if (!s) return
       const dxCm = (e.clientX - s.startClientX) / scale
       const dyCm = (e.clientY - s.startClientY) / scale
-      setDragOffsetPx(null)
+      const rawXCm = s.startXCm + dxCm
+      const rawYCm = s.startYCm + dyCm
+      s.lastRawXCm = rawXCm
+      s.lastRawYCm = rawYCm
+      if (onMoveUpdate) {
+        onMoveUpdate(placement.id, rawXCm, rawYCm)
+      }
+    }
+    const onUp = () => {
+      const s = dragStateRef.current
       dragStateRef.current = null
-      if (dxCm !== 0 || dyCm !== 0) {
-        onMove(s.startXCm + dxCm, s.startYCm + dyCm)
+      setDragging(false)
+      if (!s) return
+      if (onMoveEnd) {
+        onMoveEnd(placement.id)
+      } else if (s.lastRawXCm !== s.startXCm || s.lastRawYCm !== s.startYCm) {
+        // Legacy path used by tests that don't wire the snap pipeline.
+        onMove(s.lastRawXCm, s.lastRawYCm)
       }
     }
     window.addEventListener('mousemove', onMove_)
@@ -81,7 +108,7 @@ export default function PlacementView({
       window.removeEventListener('mousemove', onMove_)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [dragOffsetPx, scale, onMove])
+  }, [dragging, scale, onMove, onMoveUpdate, onMoveEnd, placement.id])
 
   // Resize-drag.
   const resizeRef = useRef<{
@@ -151,14 +178,25 @@ export default function PlacementView({
       startClientY: e.clientY,
       startXCm: placement.xCm,
       startYCm: placement.yCm,
+      lastRawXCm: placement.xCm,
+      lastRawYCm: placement.yCm,
     }
-    setDragOffsetPx({ x: 0, y: 0 })
+    setDragging(true)
+    if (onMoveStart) onMoveStart(placement.id)
   }
 
-  const centerXPx = cmToPx(placement.xCm, scale) + (dragOffsetPx?.x ?? 0)
-  const centerYPx = cmToPx(placement.yCm, scale) + (dragOffsetPx?.y ?? 0)
+  const xCm = renderXCm ?? placement.xCm
+  const yCm = renderYCm ?? placement.yCm
+  const centerXPx = cmToPx(xCm, scale)
+  const centerYPx = cmToPx(yCm, scale)
   const leftPx = centerXPx - widthPx / 2
   const topPx = centerYPx - heightPx / 2
+
+  const outline = overlapping
+    ? '2px solid #d23a3a'
+    : selected
+      ? '2px solid #2a6df4'
+      : '1px solid #888'
 
   return (
     <div
@@ -169,6 +207,7 @@ export default function PlacementView({
       data-y-cm={placement.yCm}
       data-orientation={size.orientation}
       data-selected={selected ? 'true' : 'false'}
+      data-overlapping={overlapping ? 'true' : 'false'}
       onMouseDown={onMouseDownBody}
       style={{
         position: 'absolute',
@@ -176,9 +215,9 @@ export default function PlacementView({
         top: topPx,
         width: widthPx,
         height: heightPx,
-        outline: selected ? '2px solid #2a6df4' : '1px solid #888',
+        outline,
         boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-        cursor: dragOffsetPx ? 'grabbing' : 'grab',
+        cursor: dragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         background: '#fff',
       }}
