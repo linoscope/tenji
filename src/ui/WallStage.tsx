@@ -13,13 +13,15 @@ type WallStageProps = {
   placements: Placement[]
   photos: Photo[]
   blobStore: BlobStore
-  selectedPlacementId: string | null
+  selectedPlacementIds: string[]
   rulerEnabled: boolean
   silhouetteEnabled: boolean
   onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
   onSelectPlacement: (id: string) => void
+  onToggleSelectPlacement: (id: string) => void
   onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
+  onMoveSelection: (dxCm: number, dyCm: number) => void
   onResizePlacement: (id: string, longEdgeCm: number) => void
 }
 
@@ -33,13 +35,15 @@ export default function WallStage({
   placements,
   photos,
   blobStore,
-  selectedPlacementId,
+  selectedPlacementIds,
   rulerEnabled,
   silhouetteEnabled,
   onDropPhoto,
   onSelectPlacement,
+  onToggleSelectPlacement,
   onClearSelection,
   onMovePlacement,
+  onMoveSelection,
   onResizePlacement,
 }: WallStageProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -90,13 +94,15 @@ export default function WallStage({
         placements={placements}
         photos={photos}
         blobStore={blobStore}
-        selectedPlacementId={selectedPlacementId}
+        selectedPlacementIds={selectedPlacementIds}
         rulerEnabled={rulerEnabled}
         silhouetteEnabled={silhouetteEnabled}
         onDropPhoto={onDropPhoto}
         onSelectPlacement={onSelectPlacement}
+        onToggleSelectPlacement={onToggleSelectPlacement}
         onClearSelection={onClearSelection}
         onMovePlacement={onMovePlacement}
+        onMoveSelection={onMoveSelection}
         onResizePlacement={onResizePlacement}
       />
     </div>

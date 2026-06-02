@@ -79,11 +79,14 @@ export default function App({
 
   const activeWall =
     state.walls.find((w) => w.id === state.ui.activeWallId) ?? state.walls[0]
-  const selectedPlacement = state.placements.find(
-    (p) => p.id === state.ui.selectedPlacementId,
-  )
-  const selectedPhoto = selectedPlacement
-    ? state.photos.find((p) => p.id === selectedPlacement.photoId)
+  const selectedPlacementIds = state.ui.selectedPlacementIds
+  const selectionCount = selectedPlacementIds.length
+  const soleSelectedPlacement =
+    selectionCount === 1
+      ? state.placements.find((p) => p.id === selectedPlacementIds[0])
+      : undefined
+  const soleSelectedPhoto = soleSelectedPlacement
+    ? state.photos.find((p) => p.id === soleSelectedPlacement.photoId)
     : undefined
 
   const importFiles = async (files: FileList | File[]) => {
@@ -99,6 +102,28 @@ export default function App({
       dispatch({ type: 'addPhoto', ...photo })
     }
   }
+
+  // Keyboard: Delete/Backspace deletes the selection, Escape clears it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Don't swallow keys when the user is typing in an input/textarea/contenteditable.
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      }
+      if (selectionCount === 0) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        dispatch({ type: 'deleteSelection' })
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        dispatch({ type: 'clearSelection' })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectionCount])
 
   // Clipboard paste imports any image items.
   useEffect(() => {
@@ -236,27 +261,34 @@ export default function App({
             {exporting ? 'Exporting…' : 'Export PNG'}
           </button>
         ) : null}
-        {selectedPlacement && selectedPhoto ? (
+        {selectionCount === 1 && soleSelectedPlacement && soleSelectedPhoto ? (
           <PlacementInspector
-            key={selectedPlacement.id}
-            placement={selectedPlacement}
-            photo={selectedPhoto}
+            key={soleSelectedPlacement.id}
+            placement={soleSelectedPlacement}
+            photo={soleSelectedPhoto}
             onResize={(longEdgeCm) =>
               dispatch({
                 type: 'resizePlacement',
-                id: selectedPlacement.id,
+                id: soleSelectedPlacement.id,
                 longEdgeCm,
               })
             }
             onSendToTray={() =>
               dispatch({
                 type: 'sendPlacementToTray',
-                id: selectedPlacement.id,
+                id: soleSelectedPlacement.id,
               })
             }
             onDeletePhoto={() =>
-              dispatch({ type: 'deletePhoto', id: selectedPhoto.id })
+              dispatch({ type: 'deletePhoto', id: soleSelectedPhoto.id })
             }
+          />
+        ) : null}
+        {selectionCount >= 2 ? (
+          <GroupInspector
+            count={selectionCount}
+            onDeleteAll={() => dispatch({ type: 'deleteSelection' })}
+            onSendAllToTray={() => dispatch({ type: 'sendSelectionToTray' })}
           />
         ) : null}
         <PhotoTray
@@ -283,7 +315,7 @@ export default function App({
           placements={state.placements.filter((p) => p.wallId === activeWall.id)}
           photos={state.photos}
           blobStore={blobStoreRef.current}
-          selectedPlacementId={state.ui.selectedPlacementId}
+          selectedPlacementIds={state.ui.selectedPlacementIds}
           rulerEnabled={state.ui.rulerEnabled}
           silhouetteEnabled={state.ui.silhouetteEnabled}
           onDropPhoto={({ photoId, xCm, yCm }) =>
@@ -299,9 +331,15 @@ export default function App({
           onSelectPlacement={(id) =>
             dispatch({ type: 'selectPlacement', id })
           }
+          onToggleSelectPlacement={(id) =>
+            dispatch({ type: 'toggleSelectPlacement', id })
+          }
           onClearSelection={() => dispatch({ type: 'clearSelection' })}
           onMovePlacement={(id, xCm, yCm) =>
             dispatch({ type: 'movePlacement', id, xCm, yCm })
+          }
+          onMoveSelection={(dxCm, dyCm) =>
+            dispatch({ type: 'moveSelection', dxCm, dyCm })
           }
           onResizePlacement={(id, longEdgeCm) =>
             dispatch({ type: 'resizePlacement', id, longEdgeCm })
@@ -421,6 +459,61 @@ function OverlayControls({
         />
         Silhouette
       </label>
+    </section>
+  )
+}
+
+type GroupInspectorProps = {
+  count: number
+  onDeleteAll: () => void
+  onSendAllToTray: () => void
+}
+
+function GroupInspector({ count, onDeleteAll, onSendAllToTray }: GroupInspectorProps) {
+  return (
+    <section
+      data-testid="group-inspector"
+      style={{
+        borderTop: '1px solid #d0d0d0',
+        paddingTop: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        fontSize: 12,
+      }}
+    >
+      <strong style={{ fontSize: 12 }}>{count} selected</strong>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          type="button"
+          onClick={onSendAllToTray}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #c0c0c0',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          Send all to tray
+        </button>
+        <button
+          type="button"
+          onClick={onDeleteAll}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #d0d0d0',
+            background: 'transparent',
+            color: '#a11',
+            cursor: 'pointer',
+          }}
+        >
+          Delete all
+        </button>
+      </div>
     </section>
   )
 }

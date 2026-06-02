@@ -100,7 +100,7 @@ describe('resizeWall', () => {
           longEdgeCm: 40,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const shrunk = appReducer(seeded, {
@@ -180,7 +180,7 @@ describe('placePhoto', () => {
       photos: [
         { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -210,7 +210,7 @@ describe('placePhoto', () => {
       photos: [
         { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -222,7 +222,7 @@ describe('placePhoto', () => {
       yCm: 80,
     })
 
-    expect(after.ui.selectedPlacementId).toBe('pl-1')
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-1'])
   })
 })
 
@@ -241,7 +241,7 @@ describe('movePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -276,7 +276,7 @@ describe('movePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -305,7 +305,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -339,7 +339,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -365,7 +365,7 @@ describe('resizePlacement', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -379,28 +379,28 @@ describe('resizePlacement', () => {
 })
 
 describe('selectPlacement', () => {
-  it('sets the selected placement id', () => {
+  it('sets selection to exactly the given id (collapses any prior selection)', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['old-1', 'old-2'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'selectPlacement', id: 'pl-1' })
 
-    expect(after.ui.selectedPlacementId).toBe('pl-1')
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-1'])
   })
 
-  it('clearSelection sets the selected placement id to null', () => {
+  it('clearSelection empties the selection set', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1', 'pl-2'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'clearSelection' })
 
-    expect(after.ui.selectedPlacementId).toBeNull()
+    expect(after.ui.selectedPlacementIds).toEqual([])
   })
 })
 
@@ -419,7 +419,7 @@ describe('movePlacement (parking)', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
@@ -451,7 +451,7 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
@@ -477,12 +477,12 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
 
-    expect(after.ui.selectedPlacementId).toBeNull()
+    expect(after.ui.selectedPlacementIds).toEqual([])
   })
 
   it('leaves other placements of the same photo intact', () => {
@@ -513,7 +513,7 @@ describe('sendPlacementToTray', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
@@ -561,7 +561,7 @@ describe('deletePhoto', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
@@ -587,12 +587,12 @@ describe('deletePhoto', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
 
-    expect(after.ui.selectedPlacementId).toBeNull()
+    expect(after.ui.selectedPlacementIds).toEqual([])
   })
 })
 
@@ -618,7 +618,7 @@ describe('deleteWall', () => {
         { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, longEdgeCm: 40 },
         { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, longEdgeCm: 40 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, { type: 'deleteWall', id: 'w1' })
@@ -673,7 +673,7 @@ describe('overlay toggles', () => {
   it('hydrate fills missing overlay flags with defaults (backwards compat)', () => {
     const legacy = {
       ...initialState,
-      ui: { activeWallId: null, selectedPlacementId: null },
+      ui: { activeWallId: null, selectedPlacementIds: [] },
       // No rulerEnabled / silhouetteEnabled in older snapshots.
     } as unknown as Parameters<typeof appReducer>[0]
 
@@ -681,5 +681,77 @@ describe('overlay toggles', () => {
 
     expect(after.ui.rulerEnabled).toBe(true)
     expect(after.ui.silhouetteEnabled).toBe(true)
+  })
+})
+
+describe('multi-select', () => {
+  const seeded = (selected: string[]): ReturnType<typeof appReducer> => ({
+    ...initialState,
+    walls: [
+      { id: 'w1', name: 'W1', widthCm: 800, heightCm: 250 },
+      { id: 'w2', name: 'W2', widthCm: 800, heightCm: 250 },
+    ],
+    placements: [
+      { id: 'pl-1', photoId: 'ph-1', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 42 },
+      { id: 'pl-2', photoId: 'ph-2', wallId: 'w1', xCm: 200, yCm: 80, longEdgeCm: 42 },
+      { id: 'pl-3', photoId: 'ph-3', wallId: 'w1', xCm: 300, yCm: 80, longEdgeCm: 42 },
+    ],
+    ui: { activeWallId: 'w1', selectedPlacementIds: selected, rulerEnabled: true, silhouetteEnabled: true },
+  })
+
+  it('selectPlacement collapses to a single id when others were selected', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-2']), { type: 'selectPlacement', id: 'pl-3' })
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-3'])
+  })
+
+  it('toggleSelectPlacement adds an id when not in the set', () => {
+    const after = appReducer(seeded(['pl-1']), { type: 'toggleSelectPlacement', id: 'pl-2' })
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-1', 'pl-2'])
+  })
+
+  it('toggleSelectPlacement removes an id when already in the set', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-2']), { type: 'toggleSelectPlacement', id: 'pl-1' })
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-2'])
+  })
+
+  it('selectWall clears the selection (selection is per-wall)', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-2']), { type: 'selectWall', id: 'w2' })
+    expect(after.ui.activeWallId).toBe('w2')
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
+  it('moveSelection shifts every selected placement by the same delta, leaving others alone', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-3']), {
+      type: 'moveSelection',
+      dxCm: 10,
+      dyCm: -5,
+    })
+    expect(after.placements.find((p) => p.id === 'pl-1')).toMatchObject({ xCm: 110, yCm: 75 })
+    expect(after.placements.find((p) => p.id === 'pl-3')).toMatchObject({ xCm: 310, yCm: 75 })
+    // pl-2 was unselected — unchanged.
+    expect(after.placements.find((p) => p.id === 'pl-2')).toMatchObject({ xCm: 200, yCm: 80 })
+  })
+
+  it('deleteSelection removes every selected placement and clears the selection', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-3']), { type: 'deleteSelection' })
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-2'])
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
+  it('sendSelectionToTray removes every selected placement and clears the selection', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-3']), { type: 'sendSelectionToTray' })
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-2'])
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
+  it('hydrate of a legacy snapshot with selectedPlacementId lifts it to a single-id set', () => {
+    const legacy = {
+      ...initialState,
+      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-legacy', rulerEnabled: true, silhouetteEnabled: true },
+    } as unknown as Parameters<typeof appReducer>[0]
+
+    const after = appReducer(initialState, { type: 'hydrate', state: legacy })
+
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-legacy'])
   })
 })

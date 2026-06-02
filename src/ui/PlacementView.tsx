@@ -10,6 +10,11 @@ type PlacementViewProps = {
   scale: number
   blobStore: BlobStore
   selected: boolean
+  /**
+   * Defaults to `selected`. Pass `false` when this placement is selected as
+   * part of a multi-select group, so the corner resize handles don't render.
+   */
+  showHandles?: boolean
   /** Visual flag when this placement overlaps another. */
   overlapping?: boolean
   /**
@@ -18,7 +23,8 @@ type PlacementViewProps = {
    */
   renderXCm?: number
   renderYCm?: number
-  onSelect: () => void
+  /** Fires on mousedown of the body. shiftKey signals additive multi-select. */
+  onSelect: (opts: { shiftKey: boolean }) => void
   /** Fires on mousedown so the parent can register the active drag. */
   onMoveStart?: (id: string) => void
   /** Fires on every mousemove with the raw (un-snapped) cursor position in cm. */
@@ -41,6 +47,7 @@ export default function PlacementView({
   scale,
   blobStore,
   selected,
+  showHandles,
   overlapping = false,
   renderXCm,
   renderYCm,
@@ -172,7 +179,7 @@ export default function PlacementView({
 
   const onMouseDownBody = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onSelect()
+    onSelect({ shiftKey: e.shiftKey || e.metaKey })
     dragStateRef.current = {
       startClientX: e.clientX,
       startClientY: e.clientY,
@@ -223,7 +230,7 @@ export default function PlacementView({
       }}
     >
       <Thumbnail photo={photo} blobStore={blobStore} />
-      {selected
+      {(showHandles ?? selected)
         ? CORNERS.map((corner) => (
             <span
               key={corner}
