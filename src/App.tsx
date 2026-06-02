@@ -21,11 +21,12 @@ import { createHtmlToImageExportPort } from './export/exportPort'
 import { triggerBlobDownload } from './export/download'
 import { wallExportFilename } from './export/filename'
 import WallStage from './ui/WallStage'
-import PhotoTray from './ui/PhotoTray'
 import PlacementInspector from './ui/PlacementInspector'
 import PrintShop from './ui/PrintShop'
 import ProjectShare from './ui/ProjectShare'
-import { computeTrayItems } from './tray/trayView'
+import { computeMarginTilePositions } from './geometry/marginTiles'
+import { DEFAULT_PLACEMENT_LONG_EDGE_CM } from './state/reducer'
+import type { ImportPhotoItem } from './state/reducer'
 import {
   buildProjectEnvelope,
   parseProjectEnvelope,
@@ -141,6 +142,10 @@ export default function App({
 
   const activeWall =
     state.walls.find((w) => w.id === state.ui.activeWallId) ?? state.walls[0]
+  // Stable ref so async file imports use the wall that's active at the time
+  // the dispatch fires (not the one captured when the picker was opened).
+  const activeWallRef = useRef(activeWall)
+  activeWallRef.current = activeWall
   const selectedPlacementIds = state.ui.selectedPlacementIds
   const selectionCount = selectedPlacementIds.length
   const soleSelectedPlacement =
@@ -152,6 +157,9 @@ export default function App({
     : undefined
 
   const importFiles = async (files: FileList | File[]) => {
+    const wall = activeWallRef.current
+    if (!wall) return
+    const imports: { photoId: string; filename: string; blobKey: string; aspectRatio: number }[] = []
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue
       const photo = await importPhotoFile({
@@ -161,8 +169,28 @@ export default function App({
         decodeImage,
         downscale,
       })
-      dispatch({ type: 'addPhoto', ...photo })
+      imports.push({
+        photoId: photo.id,
+        filename: photo.filename,
+        blobKey: photo.blobKey,
+        aspectRatio: photo.aspectRatio,
+      })
     }
+    if (imports.length === 0) return
+    const positions = computeMarginTilePositions({
+      longEdgeCm: DEFAULT_PLACEMENT_LONG_EDGE_CM,
+      photos: imports.map((p) => ({ aspectRatio: p.aspectRatio })),
+      wallWidthCm: wall.widthCm,
+      wallHeightCm: wall.heightCm,
+    })
+    const items: ImportPhotoItem[] = imports.map((p, i) => ({
+      ...p,
+      placementId: createId(),
+      wallId: wall.id,
+      xCm: positions[i].xCm,
+      yCm: positions[i].yCm,
+    }))
+    dispatch({ type: 'importPhotos', items })
   }
 
   // Keyboard: Delete/Backspace deletes the selection, Escape clears it,
@@ -399,33 +427,16 @@ export default function App({
                 longEdgeCm,
               })
             }
-            onSendToTray={() =>
-              dispatch({
-                type: 'sendPlacementToTray',
-                id: soleSelectedPlacement.id,
-              })
-            }
-            onDeletePhoto={() =>
-              dispatch({ type: 'deletePhoto', id: soleSelectedPhoto.id })
-            }
+            onDelete={() => dispatch({ type: 'deleteSelection' })}
           />
         ) : null}
         {selectionCount >= 2 ? (
           <GroupInspector
             count={selectionCount}
             onDeleteAll={() => dispatch({ type: 'deleteSelection' })}
-            onSendAllToTray={() => dispatch({ type: 'sendSelectionToTray' })}
           />
         ) : null}
-        <PhotoTray
-          items={computeTrayItems({
-            photos: state.photos,
-            placements: state.placements,
-            walls: state.walls,
-          })}
-          blobStore={blobStoreRef.current}
-          onImportFiles={importFiles}
-        />
+        <PhotoImportButton onImportFiles={importFiles} />
         <PrintShop
           photos={state.photos}
           placements={state.placements}
@@ -450,16 +461,6 @@ export default function App({
           selectedPlacementIds={state.ui.selectedPlacementIds}
           rulerEnabled={state.ui.rulerEnabled}
           silhouetteEnabled={state.ui.silhouetteEnabled}
-          onDropPhoto={({ photoId, xCm, yCm }) =>
-            dispatch({
-              type: 'placePhoto',
-              id: createId(),
-              photoId,
-              wallId: activeWall.id,
-              xCm,
-              yCm,
-            })
-          }
           onSelectPlacement={(id) =>
             dispatch({ type: 'selectPlacement', id })
           }
@@ -480,6 +481,51 @@ export default function App({
         />
       ) : null}
     </div>
+  )
+}
+
+type PhotoImportButtonProps = {
+  onImportFiles: (files: FileList | File[]) => void
+}
+
+function PhotoImportButton({ onImportFiles }: PhotoImportButtonProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      onImportFiles(e.target.files)
+      e.target.value = ''
+    }
+  }
+  return (
+    <section
+      style={{
+        borderTop: '1px solid #d0d0d0',
+        paddingTop: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        style={{ fontSize: 12 }}
+      >
+        + Import photos
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onPickFiles}
+        aria-label="Import photos"
+        style={{ position: 'absolute', left: -9999, width: 1, height: 1 }}
+      />
+      <p style={{ fontSize: 11, color: '#666', margin: 0 }}>
+        Drop, paste, or pick image files. Imports land in the margin around the wall.
+      </p>
+    </section>
   )
 }
 
@@ -599,10 +645,9 @@ function OverlayControls({
 type GroupInspectorProps = {
   count: number
   onDeleteAll: () => void
-  onSendAllToTray: () => void
 }
 
-function GroupInspector({ count, onDeleteAll, onSendAllToTray }: GroupInspectorProps) {
+function GroupInspector({ count, onDeleteAll }: GroupInspectorProps) {
   return (
     <section
       data-testid="group-inspector"
@@ -617,20 +662,6 @@ function GroupInspector({ count, onDeleteAll, onSendAllToTray }: GroupInspectorP
     >
       <strong style={{ fontSize: 12 }}>{count} selected</strong>
       <div style={{ display: 'flex', gap: 4 }}>
-        <button
-          type="button"
-          onClick={onSendAllToTray}
-          style={{
-            flex: 1,
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid #c0c0c0',
-            background: '#fff',
-            cursor: 'pointer',
-          }}
-        >
-          Send all to tray
-        </button>
         <button
           type="button"
           onClick={onDeleteAll}

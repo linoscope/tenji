@@ -26,9 +26,10 @@ type AggregateInput = {
 }
 
 /**
- * Group placements across all walls by (photoId, longEdgeCm). Tray-only
- * photos (no placements) and placements pointing at a missing photo are
- * excluded.
+ * Group placements across all walls by (photoId, longEdgeCm). Only
+ * placements whose **center is inside the wall bounds** count — margin-
+ * parked placements are excluded. Placements pointing at a missing photo
+ * or wall are also excluded.
  */
 export function aggregatePrintRows({
   photos,
@@ -38,6 +39,7 @@ export function aggregatePrintRows({
   const photoById = new Map(photos.map((p) => [p.id, p]))
   const wallNameById = new Map(walls.map((w) => [w.id, w.name]))
   const wallOrder = new Map(walls.map((w, i) => [w.id, i]))
+  const wallById = new Map(walls.map((w) => [w.id, w]))
 
   type Accum = {
     photo: Photo
@@ -50,6 +52,16 @@ export function aggregatePrintRows({
   for (const p of placements) {
     const photo = photoById.get(p.photoId)
     if (!photo) continue
+    const wall = wallById.get(p.wallId)
+    if (!wall) continue
+    // Center-in-bounds filter: parked-in-margin placements don't count.
+    if (
+      p.xCm < 0 ||
+      p.xCm > wall.widthCm ||
+      p.yCm < 0 ||
+      p.yCm > wall.heightCm
+    )
+      continue
     const key = `${p.photoId}__${p.longEdgeCm}`
     const existing = groups.get(key)
     if (existing) {
