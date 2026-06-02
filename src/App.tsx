@@ -2,11 +2,22 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { appReducer, initialState } from './state/reducer'
 import type { StatePort } from './storage/port'
 import { createIdbStatePort } from './storage/idbStatePort'
+import type { BlobStore } from './storage/blobStore'
+import { createIdbBlobStore } from './storage/idbBlobStore'
+import { importPhotoFile } from './photo/photoImport'
+import type { DecodeImage, Downscale } from './photo/photoImport'
+import {
+  decodeImage as browserDecodeImage,
+  downscale as browserDownscale,
+} from './photo/browserImageOps'
 import WallStage from './ui/WallStage'
+import PhotoTray from './ui/PhotoTray'
 
 type AppProps = {
   port?: StatePort
+  blobStore?: BlobStore
   createId?: () => string
+  imageOps?: { decodeImage: DecodeImage; downscale: Downscale }
 }
 
 const defaultCreateId = () =>
@@ -14,8 +25,16 @@ const defaultCreateId = () =>
     ? crypto.randomUUID()
     : String(Date.now() + Math.random())
 
-export default function App({ port, createId = defaultCreateId }: AppProps) {
+export default function App({
+  port,
+  blobStore,
+  createId = defaultCreateId,
+  imageOps,
+}: AppProps) {
   const portRef = useRef<StatePort>(port ?? createIdbStatePort())
+  const blobStoreRef = useRef<BlobStore>(blobStore ?? createIdbBlobStore())
+  const decodeImage = imageOps?.decodeImage ?? browserDecodeImage
+  const downscale = imageOps?.downscale ?? browserDownscale
   const [state, dispatch] = useReducer(appReducer, initialState)
   const [hydrated, setHydrated] = useState(false)
 
@@ -45,8 +64,61 @@ export default function App({ port, createId = defaultCreateId }: AppProps) {
   const activeWall =
     state.walls.find((w) => w.id === state.ui.activeWallId) ?? state.walls[0]
 
+  const importFiles = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue
+      const photo = await importPhotoFile({
+        file,
+        blobStore: blobStoreRef.current,
+        createId,
+        decodeImage,
+        downscale,
+      })
+      dispatch({ type: 'addPhoto', ...photo })
+    }
+  }
+
+  // Clipboard paste imports any image items.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (const item of Array.from(items)) {
+        if (item.kind === 'file') {
+          const f = item.getAsFile()
+          if (f && f.type.startsWith('image/')) files.push(f)
+        }
+      }
+      if (files.length > 0) {
+        e.preventDefault()
+        void importFiles(files)
+      }
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (e.dataTransfer.files.length > 0) {
+      void importFiles(e.dataTransfer.files)
+    }
+  }
+  const onDragOver = (e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer.types).includes('Files')) {
+      e.preventDefault()
+    }
+  }
+
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+    <div
+      data-testid="app-root"
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+      style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif' }}
+    >
       <aside
         style={{
           width: 240,
@@ -110,6 +182,11 @@ export default function App({ port, createId = defaultCreateId }: AppProps) {
             onDelete={() => dispatch({ type: 'deleteWall', id: activeWall.id })}
           />
         ) : null}
+        <PhotoTray
+          photos={state.photos}
+          blobStore={blobStoreRef.current}
+          onImportFiles={importFiles}
+        />
       </aside>
       {activeWall ? <WallStage wall={activeWall} /> : null}
     </div>

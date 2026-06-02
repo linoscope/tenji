@@ -114,6 +114,64 @@ describe('resizeWall', () => {
   })
 })
 
+describe('addPhoto', () => {
+  it('adds a photo to the tray', () => {
+    const state = appReducer(initialState, {
+      type: 'addPhoto',
+      id: 'photo-1',
+      filename: 'cat.jpg',
+      blobKey: 'blob-1',
+      aspectRatio: 1.5,
+    })
+
+    expect(state.photos).toHaveLength(1)
+    expect(state.photos[0]).toMatchObject({
+      id: 'photo-1',
+      filename: 'cat.jpg',
+      blobKey: 'blob-1',
+      aspectRatio: 1.5,
+    })
+  })
+
+  it('appends photos so the tray is ordered by insertion', () => {
+    const a = appReducer(initialState, {
+      type: 'addPhoto',
+      id: 'p1',
+      filename: 'a.jpg',
+      blobKey: 'b1',
+      aspectRatio: 1,
+    })
+    const b = appReducer(a, {
+      type: 'addPhoto',
+      id: 'p2',
+      filename: 'b.jpg',
+      blobKey: 'b2',
+      aspectRatio: 2,
+    })
+
+    expect(b.photos.map((p) => p.id)).toEqual(['p1', 'p2'])
+  })
+
+  it('shares the tray across walls (photos are not scoped to a wall)', () => {
+    const withWalls = appReducer(
+      appReducer(initialState, { type: 'createWall', id: 'w1' }),
+      { type: 'createWall', id: 'w2' },
+    )
+
+    const after = appReducer(withWalls, {
+      type: 'addPhoto',
+      id: 'p1',
+      filename: 'a.jpg',
+      blobKey: 'b1',
+      aspectRatio: 1,
+    })
+
+    // Photo is in the global tray, not tied to either wall.
+    expect(after.photos).toHaveLength(1)
+    expect(after.walls).toHaveLength(2)
+  })
+})
+
 describe('deleteWall', () => {
   it('removes the wall with the given id', () => {
     const a = appReducer(initialState, { type: 'createWall', id: 'w1' })

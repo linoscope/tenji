@@ -22,6 +22,13 @@ export type Action =
   | { type: 'renameWall'; id: string; name: string }
   | { type: 'resizeWall'; id: string; widthCm: number; heightCm: number }
   | { type: 'deleteWall'; id: string }
+  | {
+      type: 'addPhoto'
+      id: string
+      filename: string
+      blobKey: string
+      aspectRatio: number
+    }
   | { type: 'hydrate'; state: AppState }
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -59,6 +66,15 @@ export function appReducer(state: AppState, action: Action): AppState {
             : w,
         ),
       }
+    case 'addPhoto': {
+      const photo = {
+        id: action.id,
+        filename: action.filename,
+        blobKey: action.blobKey,
+        aspectRatio: action.aspectRatio,
+      }
+      return { ...state, photos: [...state.photos, photo] }
+    }
     case 'deleteWall': {
       const walls = state.walls.filter((w) => w.id !== action.id)
       const placements = state.placements.filter((p) => p.wallId !== action.id)
