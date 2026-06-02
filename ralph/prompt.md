@@ -8,9 +8,16 @@ The backlog lives in **GitHub Issues** on `linoscope/tenji`. The currently open
 - An issue is **eligible** only if every issue listed in its "Blocked by" section is
   CLOSED. Check each blocker with `gh issue view <n> --json state`.
 - The user has opted to attempt the one HITL issue (#7) as well, so treat all slices as workable.
+- Do NOT trust the injected issue list for blocker status — it only shows numbers and titles.
+  Determine eligibility yourself by reading each open issue's "Blocked by" via `gh`.
 
-If there is **no eligible issue** (none open, or all remaining are blocked), output exactly
-`<promise>NO MORE TASKS</promise>` and stop. Make no changes.
+Emit `<promise>NO MORE TASKS</promise>` ONLY when, after checking every open
+`ready-for-agent` issue, **none** is eligible (each has at least one still-open blocker), or
+none are open at all. In that case make no changes and stop.
+
+**Finishing your one task is NOT a reason to emit the promise.** After you merge your task,
+just stop silently — the loop restarts you, and the next run re-checks eligibility. When in
+doubt, do NOT emit the promise; let the loop run again.
 
 # TASK SELECTION
 
@@ -51,4 +58,5 @@ Fix until green. Never integrate red.
 
 # FINAL RULES
 
-ONLY WORK ON A SINGLE TASK. Then stop — the loop will restart you fresh for the next one.
+ONLY WORK ON A SINGLE TASK — merge exactly one issue, then stop. Do NOT go on to a second
+issue in the same run, even if more are eligible. The loop will restart you fresh for the next one.
