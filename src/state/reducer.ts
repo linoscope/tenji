@@ -43,6 +43,8 @@ export type Action =
   | { type: 'resizePlacement'; id: string; longEdgeCm: number }
   | { type: 'selectPlacement'; id: string }
   | { type: 'clearSelection' }
+  | { type: 'sendPlacementToTray'; id: string }
+  | { type: 'deletePhoto'; id: string }
   | { type: 'hydrate'; state: AppState }
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -122,6 +124,38 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, ui: { ...state.ui, selectedPlacementId: action.id } }
     case 'clearSelection':
       return { ...state, ui: { ...state.ui, selectedPlacementId: null } }
+    case 'sendPlacementToTray': {
+      const placements = state.placements.filter((p) => p.id !== action.id)
+      const selectedPlacementId =
+        state.ui.selectedPlacementId === action.id
+          ? null
+          : state.ui.selectedPlacementId
+      return {
+        ...state,
+        placements,
+        ui: { ...state.ui, selectedPlacementId },
+      }
+    }
+    case 'deletePhoto': {
+      const photos = state.photos.filter((p) => p.id !== action.id)
+      const removedPlacementIds = new Set(
+        state.placements.filter((p) => p.photoId === action.id).map((p) => p.id),
+      )
+      const placements = state.placements.filter(
+        (p) => p.photoId !== action.id,
+      )
+      const selectedPlacementId =
+        state.ui.selectedPlacementId &&
+        removedPlacementIds.has(state.ui.selectedPlacementId)
+          ? null
+          : state.ui.selectedPlacementId
+      return {
+        ...state,
+        photos,
+        placements,
+        ui: { ...state.ui, selectedPlacementId },
+      }
+    }
     case 'deleteWall': {
       const walls = state.walls.filter((w) => w.id !== action.id)
       const placements = state.placements.filter((p) => p.wallId !== action.id)
