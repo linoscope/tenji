@@ -17,6 +17,7 @@ import { wallExportFilename } from './export/filename'
 import WallStage from './ui/WallStage'
 import PhotoTray from './ui/PhotoTray'
 import PlacementInspector from './ui/PlacementInspector'
+import PrintShop from './ui/PrintShop'
 
 type AppProps = {
   port?: StatePort
@@ -261,6 +262,13 @@ export default function App({
           photos={state.photos}
           blobStore={blobStoreRef.current}
           onImportFiles={importFiles}
+        />
+        <PrintShop
+          photos={state.photos}
+          placements={state.placements}
+          walls={state.walls}
+          blobStore={blobStoreRef.current}
+          downloadBlob={downloadBlob}
         />
       </aside>
       {activeWall ? (
