@@ -86,6 +86,7 @@ function classify(
     case 'selectWall':
     case 'selectPlacement':
     case 'toggleSelectPlacement':
+    case 'setSelection':
     case 'clearSelection':
     case 'toggleRuler':
     case 'toggleSilhouette':

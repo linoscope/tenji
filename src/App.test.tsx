@@ -2359,6 +2359,279 @@ describe('App', () => {
     })
   })
 
+  describe('marquee selection', () => {
+    const seededTwo = (selected: string[] = []) => ({
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+        { id: 'photo-3', filename: 'c.jpg', blobKey: 'b3', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        // longEdgeCm 20 → 20cm square. Centered at (50,50) → spans [40,60].
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 50, yCm: 50, longEdgeCm: 20 },
+        // Centered at (200,50) → spans [190,210].
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 50, longEdgeCm: 20 },
+        // Parked in the left margin at (-30,150) → spans [-40,-20].
+        { id: 'pl-margin', photoId: 'photo-3', wallId: 'w1', xCm: -30, yCm: 150, longEdgeCm: 20 },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementIds: selected,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    })
+
+    /** Make wall rect 500×300 so 1 wall-px = 1 cm; stage at (-200,-200, 800, 500). */
+    function stubGeometry() {
+      const wall = screen.getByTestId('wall') as HTMLElement
+      wall.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 500,
+          bottom: 300,
+          width: 500,
+          height: 300,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect
+      return wall
+    }
+
+    it('drag-box on empty stage selects every covered placement on mouseup', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+      const a = screen.getByTestId('placement-pl-a')
+      const b = screen.getByTestId('placement-pl-b')
+
+      // Box from (10,10) to (220,80) (in client px === cm) covers pl-a and pl-b.
+      fireEvent.mouseDown(stage, { clientX: 10, clientY: 10 })
+      fireEvent.mouseMove(window, { clientX: 220, clientY: 80 })
+      // Still selecting only previewed mid-drag; commit on up.
+      fireEvent.mouseUp(window, { clientX: 220, clientY: 80 })
+
+      await waitFor(() => {
+        expect(a).toHaveAttribute('data-selected', 'true')
+        expect(b).toHaveAttribute('data-selected', 'true')
+      })
+      expect(screen.getByTestId('group-inspector')).toHaveTextContent('2 selected')
+    })
+
+    it('marquee can start in the gray margin and selects parked photos there', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      // Start at clientX=-80 (well into the left margin), end at clientX=-10.
+      // In cm: [-80,-10] × [100,200] — overlaps pl-margin at [-40,-20].
+      fireEvent.mouseDown(stage, { clientX: -80, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: -10, clientY: 200 })
+      fireEvent.mouseUp(window, { clientX: -10, clientY: 200 })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('placement-pl-margin')).toHaveAttribute(
+          'data-selected',
+          'true',
+        ),
+      )
+      expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+        'data-selected',
+        'false',
+      )
+    })
+
+    it('shift-drag adds the box hits to the current selection (union)', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      // Shift-drag covering pl-b only.
+      fireEvent.mouseDown(stage, {
+        clientX: 180,
+        clientY: 30,
+        shiftKey: true,
+      })
+      fireEvent.mouseMove(window, {
+        clientX: 220,
+        clientY: 80,
+        shiftKey: true,
+      })
+      fireEvent.mouseUp(window, { clientX: 220, clientY: 80, shiftKey: true })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+          'data-selected',
+          'true',
+        )
+        expect(screen.getByTestId('placement-pl-b')).toHaveAttribute(
+          'data-selected',
+          'true',
+        )
+      })
+    })
+
+    it('sub-threshold click on empty stage clears the selection (no stray box)', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      fireEvent.mouseDown(stage, { clientX: 300, clientY: 250 })
+      // Move 2px — below the 4px threshold.
+      fireEvent.mouseMove(window, { clientX: 302, clientY: 251 })
+      fireEvent.mouseUp(window, { clientX: 302, clientY: 251 })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+          'data-selected',
+          'false',
+        ),
+      )
+      // The marquee overlay must not be left behind.
+      expect(screen.queryByTestId('marquee')).not.toBeInTheDocument()
+    })
+
+    it('a plain marquee covering nothing clears the current selection', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      // Drag in an empty area (lower-right of margin) — no placements.
+      fireEvent.mouseDown(stage, { clientX: 400, clientY: 260 })
+      fireEvent.mouseMove(window, { clientX: 470, clientY: 290 })
+      fireEvent.mouseUp(window, { clientX: 470, clientY: 290 })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+          'data-selected',
+          'false',
+        ),
+      )
+    })
+
+    it('a shift marquee covering nothing leaves the current selection unchanged', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      // Drag in an area covering no placements (lower-right of margin).
+      fireEvent.mouseDown(stage, { clientX: 400, clientY: 260, shiftKey: true })
+      fireEvent.mouseMove(window, { clientX: 470, clientY: 290, shiftKey: true })
+      fireEvent.mouseUp(window, { clientX: 470, clientY: 290, shiftKey: true })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+          'data-selected',
+          'true',
+        ),
+      )
+    })
+
+    it('mousedown on a photo moves it — never starts a marquee', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('stage')
+      stubGeometry()
+      const a = screen.getByTestId('placement-pl-a')
+
+      // Mousedown directly on pl-a (event will bubble to the stage but
+      // target !== currentTarget, so the stage should NOT start a marquee).
+      fireEvent.mouseDown(a, { clientX: 50, clientY: 50 })
+      fireEvent.mouseMove(window, { clientX: 90, clientY: 50 })
+      fireEvent.mouseUp(window, { clientX: 90, clientY: 50 })
+
+      await waitFor(() =>
+        expect(a).toHaveAttribute('data-selected', 'true'),
+      )
+      // pl-b was not under the move, so it stays unselected.
+      expect(screen.getByTestId('placement-pl-b')).toHaveAttribute(
+        'data-selected',
+        'false',
+      )
+      expect(screen.queryByTestId('marquee')).not.toBeInTheDocument()
+    })
+
+    it('renders a live marquee overlay during the drag and removes it on release', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      stubGeometry()
+
+      fireEvent.mouseDown(stage, { clientX: 10, clientY: 10 })
+      fireEvent.mouseMove(window, { clientX: 220, clientY: 80 })
+      expect(screen.getByTestId('marquee')).toBeInTheDocument()
+      fireEvent.mouseUp(window, { clientX: 220, clientY: 80 })
+      await waitFor(() =>
+        expect(screen.queryByTestId('marquee')).not.toBeInTheDocument(),
+      )
+    })
+  })
+
   it('switching the active wall clears the selection', async () => {
     const user = userEvent.setup()
     const seeded = {
