@@ -1,6 +1,6 @@
 #!/bin/bash
-# Ralph once — a single supervised iteration. Implements one eligible issue.
-# Uses acceptEdits so you stay in the loop for non-edit actions. No Docker.
+# Ralph once — a single iteration. Implements one eligible issue.
+# Uses --dangerously-skip-permissions (no prompts), same as afk.sh. No Docker.
 # Usage: ralph/once.sh
 cd "$(dirname "$0")/.."
 
@@ -9,7 +9,7 @@ issues=$(gh issue list --label ready-for-agent --state open --json number,title 
           -q '.[] | "#\(.number) \(.title)"' 2>/dev/null || echo "No issues found")
 prompt=$(cat ralph/prompt.md)
 
-claude --permission-mode acceptEdits \
+claude --dangerously-skip-permissions \
   "Previous commits:
 $commits
 
