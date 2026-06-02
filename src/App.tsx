@@ -49,36 +49,138 @@ export default function App({ port, createId = defaultCreateId }: AppProps) {
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif' }}>
       <aside
         style={{
-          width: 220,
+          width: 240,
           borderRight: '1px solid #d0d0d0',
           padding: 16,
           boxSizing: 'border-box',
           background: '#fafafa',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          overflow: 'auto',
         }}
       >
-        <h1 style={{ fontSize: 16, margin: '0 0 12px' }}>Tenji</h1>
+        <h1 style={{ fontSize: 16, margin: 0 }}>Tenji</h1>
         <button onClick={() => dispatch({ type: 'createWall', id: createId() })}>
           + Add wall
         </button>
-        <ul style={{ listStyle: 'none', padding: 0, marginTop: 16 }}>
-          {state.walls.map((wall) => (
-            <li
-              key={wall.id}
-              style={{
-                padding: '6px 8px',
-                borderRadius: 4,
-                fontWeight: wall.id === state.ui.activeWallId ? 600 : 400,
-              }}
-            >
-              {wall.name}{' '}
-              <span style={{ color: '#888', fontSize: 12 }}>
-                {wall.widthCm}×{wall.heightCm} cm
-              </span>
-            </li>
-          ))}
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {state.walls.map((wall) => {
+            const isActive = wall.id === state.ui.activeWallId
+            return (
+              <li key={wall.id} style={{ marginBottom: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'selectWall', id: wall.id })}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '6px 8px',
+                    borderRadius: 4,
+                    border: '1px solid transparent',
+                    background: isActive ? '#e6efff' : 'transparent',
+                    fontWeight: isActive ? 600 : 400,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {wall.name}{' '}
+                  <span style={{ color: '#888', fontSize: 12 }}>
+                    {wall.widthCm}×{wall.heightCm} cm
+                  </span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
+        {activeWall ? (
+          <WallEditor
+            key={activeWall.id}
+            wall={activeWall}
+            onRename={(name) =>
+              dispatch({ type: 'renameWall', id: activeWall.id, name })
+            }
+            onResize={(widthCm, heightCm) =>
+              dispatch({
+                type: 'resizeWall',
+                id: activeWall.id,
+                widthCm,
+                heightCm,
+              })
+            }
+            onDelete={() => dispatch({ type: 'deleteWall', id: activeWall.id })}
+          />
+        ) : null}
       </aside>
       {activeWall ? <WallStage wall={activeWall} /> : null}
     </div>
+  )
+}
+
+type WallEditorProps = {
+  wall: { id: string; name: string; widthCm: number; heightCm: number }
+  onRename: (name: string) => void
+  onResize: (widthCm: number, heightCm: number) => void
+  onDelete: () => void
+}
+
+function WallEditor({ wall, onRename, onResize, onDelete }: WallEditorProps) {
+  return (
+    <section
+      style={{
+        borderTop: '1px solid #d0d0d0',
+        paddingTop: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
+        Wall name
+        <input
+          type="text"
+          value={wall.name}
+          onChange={(e) => onRename(e.target.value)}
+        />
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
+        Width (cm)
+        <input
+          type="number"
+          min={1}
+          value={wall.widthCm}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            if (Number.isFinite(n) && n > 0) onResize(n, wall.heightCm)
+          }}
+        />
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
+        Height (cm)
+        <input
+          type="number"
+          min={1}
+          value={wall.heightCm}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            if (Number.isFinite(n) && n > 0) onResize(wall.widthCm, n)
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={onDelete}
+        style={{
+          marginTop: 4,
+          color: '#a11',
+          background: 'transparent',
+          border: '1px solid #d0d0d0',
+          borderRadius: 4,
+          padding: '4px 8px',
+          cursor: 'pointer',
+        }}
+      >
+        Delete wall
+      </button>
+    </section>
   )
 }

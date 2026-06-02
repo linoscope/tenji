@@ -39,3 +39,127 @@ describe('hydrate', () => {
     expect(result).toEqual(loaded)
   })
 })
+
+describe('selectWall', () => {
+  it('sets the active wall to the given id', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+    const b = appReducer(a, { type: 'createWall', id: 'w2' })
+
+    expect(b.ui.activeWallId).toBe('w2')
+
+    const c = appReducer(b, { type: 'selectWall', id: 'w1' })
+    expect(c.ui.activeWallId).toBe('w1')
+  })
+})
+
+describe('renameWall', () => {
+  it('changes the name of the wall with the matching id', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+
+    const b = appReducer(a, { type: 'renameWall', id: 'w1', name: 'North Wall' })
+
+    expect(b.walls[0].name).toBe('North Wall')
+  })
+
+  it('leaves other walls unchanged', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+    const b = appReducer(a, { type: 'createWall', id: 'w2' })
+
+    const c = appReducer(b, { type: 'renameWall', id: 'w2', name: 'East' })
+
+    expect(c.walls[0].name).toBe('Wall 1')
+    expect(c.walls[1].name).toBe('East')
+  })
+})
+
+describe('resizeWall', () => {
+  it('updates width and height for the matching wall', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+
+    const b = appReducer(a, {
+      type: 'resizeWall',
+      id: 'w1',
+      widthCm: 600,
+      heightCm: 200,
+    })
+
+    expect(b.walls[0]).toMatchObject({ widthCm: 600, heightCm: 200 })
+  })
+
+  it("leaves placements' cm positions unchanged so out-of-bounds photos remain visible in the margin", () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'p1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 700,
+          yCm: 200,
+          longEdgeCm: 40,
+        },
+      ],
+      ui: { activeWallId: 'w1' },
+    }
+
+    const shrunk = appReducer(seeded, {
+      type: 'resizeWall',
+      id: 'w1',
+      widthCm: 400,
+      heightCm: 150,
+    })
+
+    expect(shrunk.placements[0]).toMatchObject({ xCm: 700, yCm: 200 })
+  })
+})
+
+describe('deleteWall', () => {
+  it('removes the wall with the given id', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+    const b = appReducer(a, { type: 'createWall', id: 'w2' })
+
+    const c = appReducer(b, { type: 'deleteWall', id: 'w1' })
+
+    expect(c.walls).toHaveLength(1)
+    expect(c.walls[0].id).toBe('w2')
+  })
+
+  it('removes placements that belonged to the deleted wall', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [
+        { id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 },
+        { id: 'w2', name: 'Wall 2', widthCm: 800, heightCm: 250 },
+      ],
+      placements: [
+        { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, longEdgeCm: 40 },
+        { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, longEdgeCm: 40 },
+      ],
+      ui: { activeWallId: 'w1' },
+    }
+
+    const after = appReducer(seeded, { type: 'deleteWall', id: 'w1' })
+
+    expect(after.placements).toHaveLength(1)
+    expect(after.placements[0].id).toBe('p2')
+  })
+
+  it('promotes another wall to active when the active wall is deleted', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+    const b = appReducer(a, { type: 'createWall', id: 'w2' })
+    // w2 is active after creation
+    const c = appReducer(b, { type: 'deleteWall', id: 'w2' })
+
+    expect(c.ui.activeWallId).toBe('w1')
+  })
+
+  it('sets active wall to null when the last wall is deleted', () => {
+    const a = appReducer(initialState, { type: 'createWall', id: 'w1' })
+
+    const b = appReducer(a, { type: 'deleteWall', id: 'w1' })
+
+    expect(b.walls).toHaveLength(0)
+    expect(b.ui.activeWallId).toBeNull()
+  })
+})
