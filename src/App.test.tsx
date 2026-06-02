@@ -772,7 +772,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 110, yCm: 150, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -800,7 +800,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 400, yCm: 250, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -831,7 +831,7 @@ describe('App', () => {
         { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -886,7 +886,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -928,7 +928,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -989,7 +989,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: 'pl-1', rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -1031,7 +1031,7 @@ describe('App', () => {
           longEdgeCm: 42,
         },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     })
     const blobStore = createMemoryBlobStore()
     const { unmount } = render(
@@ -1077,7 +1077,7 @@ describe('App', () => {
         // pl-b center-Y = 150.5 → within 1cm tolerance of pl-a's 150
         { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150.5, longEdgeCm: 42 },
       ],
-      ui: { activeWallId: 'w1', selectedPlacementId: null, rulerEnabled: true, silhouetteEnabled: true },
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
     render(
       <App
@@ -1169,7 +1169,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: 'pl-1',
+        selectedPlacementIds: ['pl-1'],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1264,7 +1264,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: null,
+        selectedPlacementIds: [],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1319,7 +1319,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: null,
+        selectedPlacementIds: [],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1375,7 +1375,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: null,
+        selectedPlacementIds: [],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1439,7 +1439,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: null,
+        selectedPlacementIds: [],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1481,7 +1481,7 @@ describe('App', () => {
       ],
       ui: {
         activeWallId: 'w1',
-        selectedPlacementId: 'pl-1',
+        selectedPlacementIds: ['pl-1'],
         rulerEnabled: true,
         silhouetteEnabled: true,
       },
@@ -1511,5 +1511,256 @@ describe('App', () => {
     expect(
       screen.queryByTestId('tray-caption-photo-1'),
     ).not.toBeInTheDocument()
+  })
+
+  it('shift-clicks add to selection and show the group inspector with no handles', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const a = await screen.findByTestId('placement-pl-a')
+    const b = await screen.findByTestId('placement-pl-b')
+
+    // Click first → exactly one selected → full inspector + handles.
+    fireEvent.mouseDown(a, { clientX: 100, clientY: 100 })
+    await waitFor(() => expect(a).toHaveAttribute('data-selected', 'true'))
+    expect(screen.getByTestId('placement-inspector')).toBeInTheDocument()
+    expect(a.querySelectorAll('[data-resize-handle]')).toHaveLength(4)
+    expect(screen.queryByTestId('group-inspector')).not.toBeInTheDocument()
+
+    // Shift-click second → 2 selected → group inspector, no handles on either.
+    fireEvent.mouseDown(b, { clientX: 300, clientY: 100, shiftKey: true })
+    await waitFor(() => expect(b).toHaveAttribute('data-selected', 'true'))
+    expect(a).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('group-inspector')).toHaveTextContent('2 selected')
+    expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument()
+    expect(
+      screen.getByTestId('placement-pl-a').querySelectorAll('[data-resize-handle]'),
+    ).toHaveLength(0)
+    expect(
+      screen.getByTestId('placement-pl-b').querySelectorAll('[data-resize-handle]'),
+    ).toHaveLength(0)
+  })
+
+  it('plain-click on an unselected photo collapses the selection to just it', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('group-inspector')
+    const a = screen.getByTestId('placement-pl-a')
+
+    // Plain mousedown on pl-a (which was already part of a 2-selection) should
+    // collapse the selection to just pl-a.
+    fireEvent.mouseDown(a, { clientX: 100, clientY: 100 })
+    fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('group-inspector')).not.toBeInTheDocument(),
+    )
+    expect(screen.getByTestId('placement-pl-a')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('placement-pl-b')).toHaveAttribute('data-selected', 'false')
+  })
+
+  it('dragging one of two selected photos shifts both by the same delta (no snapping)', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 200, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    const a = await screen.findByTestId('placement-pl-a')
+
+    // Drag pl-a by +50px right, +30px down — at scale 1 the deltas in cm
+    // exactly match the px deltas (the test viewport doesn't scale).
+    fireEvent.mouseDown(a, { clientX: 100, clientY: 100 })
+    fireEvent.mouseMove(window, { clientX: 150, clientY: 130 })
+    fireEvent.mouseUp(window, { clientX: 150, clientY: 130 })
+
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-pl-a')
+      // Both shift by the same delta — no snapping kicks in for groups.
+      expect(Number(after.getAttribute('data-x-cm'))).toBeGreaterThan(100)
+    })
+    const afterA = screen.getByTestId('placement-pl-a')
+    const afterB = screen.getByTestId('placement-pl-b')
+    const dxA = Number(afterA.getAttribute('data-x-cm')) - 100
+    const dyA = Number(afterA.getAttribute('data-y-cm')) - 100
+    const dxB = Number(afterB.getAttribute('data-x-cm')) - 300
+    const dyB = Number(afterB.getAttribute('data-y-cm')) - 200
+    expect(dxA).toBeCloseTo(dxB)
+    expect(dyA).toBeCloseTo(dyB)
+    expect(dxA).not.toBe(0)
+  })
+
+  it('Delete deletes every selected placement; Escape clears the selection', async () => {
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+        { id: 'photo-3', filename: 'c.jpg', blobKey: 'b3', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-c', photoId: 'photo-3', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-c'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('group-inspector')
+
+    fireEvent.keyDown(window, { key: 'Delete' })
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId('placement-pl-c')).not.toBeInTheDocument()
+    expect(screen.getByTestId('placement-pl-b')).toBeInTheDocument()
+    expect(screen.queryByTestId('group-inspector')).not.toBeInTheDocument()
+
+    // Now select pl-b and Escape clears it.
+    fireEvent.mouseDown(screen.getByTestId('placement-pl-b'), { clientX: 200, clientY: 100 })
+    await waitFor(() =>
+      expect(screen.getByTestId('placement-pl-b')).toHaveAttribute(
+        'data-selected',
+        'true',
+      ),
+    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.getByTestId('placement-pl-b')).toHaveAttribute(
+        'data-selected',
+        'false',
+      ),
+    )
+  })
+
+  it('group inspector Send all to tray removes every selected placement', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('group-inspector')
+
+    await user.click(screen.getByRole('button', { name: /send all to tray/i }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId('placement-pl-b')).not.toBeInTheDocument()
+    // Photos remain in the tray.
+    expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument()
+    expect(screen.getByTestId('tray-photo-photo-2')).toBeInTheDocument()
+  })
+
+  it('switching the active wall clears the selection', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-inspector')
+
+    await user.click(screen.getByRole('button', { name: /south wall/i }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId('group-inspector')).not.toBeInTheDocument()
   })
 })

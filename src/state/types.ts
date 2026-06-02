@@ -28,7 +28,8 @@ export type AppState = {
   placements: Placement[]
   ui: {
     activeWallId: string | null
-    selectedPlacementId: string | null
+    /** Set of selected placement ids on the active wall. Empty when nothing is selected. */
+    selectedPlacementIds: string[]
     rulerEnabled: boolean
     silhouetteEnabled: boolean
   }

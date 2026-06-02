@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Wall, Placement, Photo } from '../state/types'
 import { cmToPx } from '../geometry/scale'
 import { computeSizeFromLongEdge } from '../geometry/sizing'
@@ -21,13 +21,15 @@ type WallViewProps = {
   placements: Placement[]
   photos: Photo[]
   blobStore: BlobStore
-  selectedPlacementId: string | null
+  selectedPlacementIds: string[]
   rulerEnabled: boolean
   silhouetteEnabled: boolean
   onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
   onSelectPlacement: (id: string) => void
+  onToggleSelectPlacement: (id: string) => void
   onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
+  onMoveSelection: (dxCm: number, dyCm: number) => void
   onResizePlacement: (id: string, longEdgeCm: number) => void
 }
 
@@ -65,16 +67,35 @@ export default function WallView({
   placements,
   photos,
   blobStore,
-  selectedPlacementId,
+  selectedPlacementIds,
   rulerEnabled,
   silhouetteEnabled,
   onDropPhoto,
   onSelectPlacement,
+  onToggleSelectPlacement,
   onClearSelection,
   onMovePlacement,
+  onMoveSelection,
   onResizePlacement,
 }: WallViewProps) {
+  const selectedSet = new Set(selectedPlacementIds)
   const [liveDrag, setLiveDrag] = useState<LiveDrag | null>(null)
+  /**
+   * When a drag begins on a placement that is part of a multi-select, we drive
+   * the whole group via moveSelection deltas and skip the snapping pipeline.
+   * Otherwise we use the existing single-photo snap path.
+   */
+  const [groupDrag, setGroupDrag] = useState<{
+    id: string
+    startXCm: number
+    startYCm: number
+    lastDxCm: number
+    lastDyCm: number
+    /** True if mousedown was a plain click on an already-selected member of a 2+ selection. */
+    collapseOnNoMove: boolean
+  } | null>(null)
+  /** Records the most recent click's shift state so onMoveStart can branch. */
+  const lastClickShiftRef = useRef(false)
 
   const onDragOver = (e: React.DragEvent) => {
     if (Array.from(e.dataTransfer.types).includes(PHOTO_MIME)) {
@@ -111,7 +132,8 @@ export default function WallView({
   let gaps: ReturnType<typeof computeAlignment>['gaps'] = []
   const overlappingIds = new Set<string>()
 
-  if (liveDrag && draggedPlacement && draggedPhoto) {
+  // Group drag suppresses snapping/guides entirely (per spec).
+  if (liveDrag && draggedPlacement && draggedPhoto && !groupDrag) {
     const draggedRect = placementToRect(
       draggedPlacement,
       draggedPhoto,
@@ -197,6 +219,19 @@ export default function WallView({
         const photo = photos.find((ph) => ph.id === p.photoId)
         if (!photo) return null
         const isLive = liveDrag?.id === p.id
+        const isSelected = selectedSet.has(p.id)
+        // While a group drag is active, every selected placement renders at
+        // its stored position + the live group delta so the whole set tracks
+        // the cursor before we commit on mouseup.
+        let renderXCm: number | undefined
+        let renderYCm: number | undefined
+        if (groupDrag && isSelected) {
+          renderXCm = p.xCm + groupDrag.lastDxCm
+          renderYCm = p.yCm + groupDrag.lastDyCm
+        } else if (isLive && snappedXCm !== null && snappedYCm !== null) {
+          renderXCm = snappedXCm
+          renderYCm = snappedYCm
+        }
         return (
           <PlacementView
             key={p.id}
@@ -204,18 +239,69 @@ export default function WallView({
             photo={photo}
             scale={scale}
             blobStore={blobStore}
-            selected={p.id === selectedPlacementId}
+            selected={isSelected}
+            // While 2+ are selected, drop the resize handles entirely.
+            showHandles={isSelected && selectedSet.size <= 1}
             overlapping={overlappingIds.has(p.id)}
-            renderXCm={isLive && snappedXCm !== null ? snappedXCm : undefined}
-            renderYCm={isLive && snappedYCm !== null ? snappedYCm : undefined}
-            onSelect={() => onSelectPlacement(p.id)}
+            renderXCm={renderXCm}
+            renderYCm={renderYCm}
+            onSelect={({ shiftKey }) => {
+              lastClickShiftRef.current = shiftKey
+              if (shiftKey) {
+                onToggleSelectPlacement(p.id)
+                return
+              }
+              // Plain mousedown on an unselected photo collapses the
+              // selection to just it; on an already-selected photo we leave
+              // the selection alone so a drag from a multi-select works as a
+              // group drag. (A no-move click commits a collapse on mouseup —
+              // see onMoveEnd below.)
+              if (!isSelected) onSelectPlacement(p.id)
+            }}
             onMoveStart={(id) => {
-              setLiveDrag({ id, rawXCm: p.xCm, rawYCm: p.yCm })
+              // Group drag fires only on a plain (non-shift) click on a
+              // placement that is already a member of a 2+ selection. Shift-
+              // clicks and plain-clicks on unselected photos always fall
+              // through to single-photo drag with the existing snap pipeline.
+              const shiftKey = lastClickShiftRef.current
+              const groupable =
+                !shiftKey && isSelected && selectedSet.size >= 2
+              if (groupable) {
+                setGroupDrag({
+                  id,
+                  startXCm: p.xCm,
+                  startYCm: p.yCm,
+                  lastDxCm: 0,
+                  lastDyCm: 0,
+                  collapseOnNoMove: true,
+                })
+              } else {
+                setLiveDrag({ id, rawXCm: p.xCm, rawYCm: p.yCm })
+              }
             }}
             onMoveUpdate={(id, xCm, yCm) => {
-              setLiveDrag({ id, rawXCm: xCm, rawYCm: yCm })
+              if (groupDrag && groupDrag.id === id) {
+                setGroupDrag({
+                  ...groupDrag,
+                  lastDxCm: xCm - groupDrag.startXCm,
+                  lastDyCm: yCm - groupDrag.startYCm,
+                })
+              } else {
+                setLiveDrag({ id, rawXCm: xCm, rawYCm: yCm })
+              }
             }}
             onMoveEnd={(id) => {
+              if (groupDrag && groupDrag.id === id) {
+                if (groupDrag.lastDxCm !== 0 || groupDrag.lastDyCm !== 0) {
+                  onMoveSelection(groupDrag.lastDxCm, groupDrag.lastDyCm)
+                } else if (groupDrag.collapseOnNoMove) {
+                  // No-move plain click on a multi-selected photo collapses
+                  // the selection to just it.
+                  onSelectPlacement(id)
+                }
+                setGroupDrag(null)
+                return
+              }
               if (snappedXCm !== null && snappedYCm !== null) {
                 if (snappedXCm !== p.xCm || snappedYCm !== p.yCm) {
                   onMovePlacement(id, snappedXCm, snappedYCm)
@@ -228,7 +314,7 @@ export default function WallView({
           />
         )
       })}
-      {liveDrag ? (
+      {liveDrag && !groupDrag ? (
         <GuideOverlay
           guides={guides}
           gaps={gaps}
