@@ -1150,6 +1150,74 @@ describe('App', () => {
     expect(screen.queryByTestId('overlay-ruler')).not.toBeInTheDocument()
   })
 
+  it('exports the active wall as a PNG download with the current arrangement', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementId: 'pl-1',
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+    let capturedEl: HTMLElement | null = null
+    let selectedAtCapture: boolean | null = null
+    let placementInCapture: boolean | null = null
+    const exportPort = {
+      exportElement: async (el: HTMLElement) => {
+        capturedEl = el
+        const placement = el.querySelector('[data-testid="placement-pl-1"]')
+        selectedAtCapture =
+          placement?.getAttribute('data-selected') === 'true'
+        placementInCapture = placement !== null
+        return new Blob(['fake-png-bytes'], { type: 'image/png' })
+      },
+    }
+    const downloaded: Array<{ blob: Blob; filename: string }> = []
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+        exportPort={exportPort}
+        downloadBlob={(blob, filename) =>
+          downloaded.push({ blob, filename })
+        }
+      />,
+    )
+
+    await screen.findByText('North Wall')
+
+    await user.click(screen.getByRole('button', { name: /export png/i }))
+
+    await waitFor(() => expect(downloaded).toHaveLength(1))
+    expect(downloaded[0].blob.type).toBe('image/png')
+    expect(downloaded[0].blob.size).toBeGreaterThan(0)
+    expect(downloaded[0].filename).toMatch(/north-wall.*\.png$/i)
+    // The exported element is the wall itself, captured without the
+    // selection chrome (handles only render when selected), and the
+    // current arrangement (the placement) is in the captured DOM.
+    expect(capturedEl).not.toBeNull()
+    expect(capturedEl!.getAttribute('data-testid')).toBe('wall')
+    expect(selectedAtCapture).toBe(false)
+    expect(placementInCapture).toBe(true)
+  })
+
   it('toggles the silhouette + floor off and on via the sidebar', async () => {
     const user = userEvent.setup()
     render(<App port={seededPort()} createId={() => 'unused'} />)

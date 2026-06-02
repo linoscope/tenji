@@ -8,6 +8,8 @@ const MARGIN_PX = 48
 
 type WallStageProps = {
   wall: Wall
+  /** Forwarded to the wall <div> so the parent can capture it for export. */
+  wallRef?: React.MutableRefObject<HTMLElement | null>
   placements: Placement[]
   photos: Photo[]
   blobStore: BlobStore
@@ -27,6 +29,7 @@ type WallStageProps = {
  */
 export default function WallStage({
   wall,
+  wallRef,
   placements,
   photos,
   blobStore,
@@ -82,6 +85,7 @@ export default function WallStage({
     >
       <WallView
         wall={wall}
+        wallRef={wallRef}
         scale={Number.isFinite(scale) ? scale : 0}
         placements={placements}
         photos={photos}
