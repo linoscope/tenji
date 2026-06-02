@@ -25,7 +25,6 @@ type WallStageProps = {
   selectedPlacementIds: string[]
   rulerEnabled: boolean
   silhouetteEnabled: boolean
-  onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
   onSelectPlacement: (id: string) => void
   onToggleSelectPlacement: (id: string) => void
   onClearSelection: () => void
@@ -83,7 +82,6 @@ export default function WallStage({
   selectedPlacementIds,
   rulerEnabled,
   silhouetteEnabled,
-  onDropPhoto,
   onSelectPlacement,
   onToggleSelectPlacement,
   onClearSelection,
@@ -305,7 +303,6 @@ export default function WallStage({
         selectedPlacementIds={liveCoveredIds}
         rulerEnabled={rulerEnabled}
         silhouetteEnabled={silhouetteEnabled}
-        onDropPhoto={onDropPhoto}
         onSelectPlacement={onSelectPlacement}
         onToggleSelectPlacement={onToggleSelectPlacement}
         onClearSelection={onClearSelection}

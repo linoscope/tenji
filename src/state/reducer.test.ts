@@ -114,115 +114,126 @@ describe('resizeWall', () => {
   })
 })
 
-describe('addPhoto', () => {
-  it('adds a photo to the tray', () => {
-    const state = appReducer(initialState, {
-      type: 'addPhoto',
-      id: 'photo-1',
-      filename: 'cat.jpg',
-      blobKey: 'blob-1',
-      aspectRatio: 1.5,
-    })
-
-    expect(state.photos).toHaveLength(1)
-    expect(state.photos[0]).toMatchObject({
-      id: 'photo-1',
-      filename: 'cat.jpg',
-      blobKey: 'blob-1',
-      aspectRatio: 1.5,
-    })
-  })
-
-  it('appends photos so the tray is ordered by insertion', () => {
-    const a = appReducer(initialState, {
-      type: 'addPhoto',
-      id: 'p1',
-      filename: 'a.jpg',
-      blobKey: 'b1',
-      aspectRatio: 1,
-    })
-    const b = appReducer(a, {
-      type: 'addPhoto',
-      id: 'p2',
-      filename: 'b.jpg',
-      blobKey: 'b2',
-      aspectRatio: 2,
-    })
-
-    expect(b.photos.map((p) => p.id)).toEqual(['p1', 'p2'])
-  })
-
-  it('shares the tray across walls (photos are not scoped to a wall)', () => {
-    const withWalls = appReducer(
-      appReducer(initialState, { type: 'createWall', id: 'w1' }),
-      { type: 'createWall', id: 'w2' },
-    )
-
-    const after = appReducer(withWalls, {
-      type: 'addPhoto',
-      id: 'p1',
-      filename: 'a.jpg',
-      blobKey: 'b1',
-      aspectRatio: 1,
-    })
-
-    // Photo is in the global tray, not tied to either wall.
-    expect(after.photos).toHaveLength(1)
-    expect(after.walls).toHaveLength(2)
-  })
-})
-
-describe('placePhoto', () => {
-  it('creates a placement at the default A3 long edge (42 cm) on the given wall', () => {
+describe('importPhotos', () => {
+  it('adds each item as a photo + a placement at the given (xCm, yCm) on the given wall', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
-      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
-      ],
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
-      type: 'placePhoto',
-      id: 'pl-1',
-      photoId: 'photo-1',
-      wallId: 'w1',
-      xCm: 100,
-      yCm: 80,
+      type: 'importPhotos',
+      items: [
+        {
+          photoId: 'p1',
+          filename: 'a.jpg',
+          blobKey: 'b1',
+          aspectRatio: 1,
+          placementId: 'pl-1',
+          wallId: 'w1',
+          xCm: 250,
+          yCm: 340, // in margin
+        },
+        {
+          photoId: 'p2',
+          filename: 'b.jpg',
+          blobKey: 'b2',
+          aspectRatio: 1.5,
+          placementId: 'pl-2',
+          wallId: 'w1',
+          xCm: 300,
+          yCm: 340,
+        },
+      ],
     })
 
-    expect(after.placements).toHaveLength(1)
+    expect(after.photos.map((p) => p.id)).toEqual(['p1', 'p2'])
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-1', 'pl-2'])
     expect(after.placements[0]).toMatchObject({
-      id: 'pl-1',
-      photoId: 'photo-1',
+      photoId: 'p1',
       wallId: 'w1',
-      xCm: 100,
-      yCm: 80,
+      xCm: 250,
+      yCm: 340,
       longEdgeCm: 42,
     })
+    expect(after.placements[1]).toMatchObject({
+      photoId: 'p2',
+      wallId: 'w1',
+      xCm: 300,
+      yCm: 340,
+    })
   })
 
-  it('selects the newly placed photo', () => {
+  it('selects the newly imported placements', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
-      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-existing'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'importPhotos',
+      items: [
+        {
+          photoId: 'p1',
+          filename: 'a.jpg',
+          blobKey: 'b1',
+          aspectRatio: 1,
+          placementId: 'pl-new',
+          wallId: 'w1',
+          xCm: 250,
+          yCm: 340,
+        },
+      ],
+    })
+
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-new'])
+  })
+
+  it('appends to existing photos/placements rather than replacing them', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
       photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+        { id: 'p-old', filename: 'old.jpg', blobKey: 'b-old', aspectRatio: 1 },
+      ],
+      placements: [
+        { id: 'pl-old', photoId: 'p-old', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
-      type: 'placePhoto',
-      id: 'pl-1',
-      photoId: 'photo-1',
-      wallId: 'w1',
-      xCm: 100,
-      yCm: 80,
+      type: 'importPhotos',
+      items: [
+        {
+          photoId: 'p-new',
+          filename: 'new.jpg',
+          blobKey: 'b-new',
+          aspectRatio: 1,
+          placementId: 'pl-new',
+          wallId: 'w1',
+          xCm: 250,
+          yCm: 340,
+        },
+      ],
     })
 
-    expect(after.ui.selectedPlacementIds).toEqual(['pl-1'])
+    expect(after.photos.map((p) => p.id)).toEqual(['p-old', 'p-new'])
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-old', 'pl-new'])
+  })
+
+  it('is a no-op when items is empty', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-existing'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+
+    const after = appReducer(seeded, { type: 'importPhotos', items: [] })
+
+    expect(after).toBe(seeded)
   })
 })
 
@@ -433,59 +444,8 @@ describe('movePlacement (parking)', () => {
   })
 })
 
-describe('sendPlacementToTray', () => {
-  it('removes the matching placement and leaves the photo in the tray', () => {
-    const seeded: ReturnType<typeof appReducer> = {
-      ...initialState,
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
-      ],
-      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 80,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
-    }
-
-    const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
-
-    expect(after.placements).toHaveLength(0)
-    expect(after.photos).toEqual(seeded.photos)
-  })
-
-  it('clears selection if the sent placement was selected', () => {
-    const seeded: ReturnType<typeof appReducer> = {
-      ...initialState,
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
-      ],
-      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 80,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
-    }
-
-    const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
-
-    expect(after.ui.selectedPlacementIds).toEqual([])
-  })
-
-  it('leaves other placements of the same photo intact', () => {
+describe('deleteSelection (instance-level)', () => {
+  it('removes only the selected placement and leaves the photo + other placements intact', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       photos: [
@@ -496,103 +456,18 @@ describe('sendPlacementToTray', () => {
         { id: 'w2', name: 'Wall 2', widthCm: 500, heightCm: 300 },
       ],
       placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 80,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-2',
-          photoId: 'photo-1',
-          wallId: 'w2',
-          xCm: 100,
-          yCm: 80,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
-    }
-
-    const after = appReducer(seeded, { type: 'sendPlacementToTray', id: 'pl-1' })
-
-    expect(after.placements).toHaveLength(1)
-    expect(after.placements[0].id).toBe('pl-2')
-  })
-})
-
-describe('deletePhoto', () => {
-  it('removes the photo and all its placements across walls', () => {
-    const seeded: ReturnType<typeof appReducer> = {
-      ...initialState,
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
-        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
-      ],
-      walls: [
-        { id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 },
-        { id: 'w2', name: 'Wall 2', widthCm: 500, heightCm: 300 },
-      ],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 10,
-          yCm: 10,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-2',
-          photoId: 'photo-1',
-          wallId: 'w2',
-          xCm: 10,
-          yCm: 10,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-3',
-          photoId: 'photo-2',
-          wallId: 'w1',
-          xCm: 10,
-          yCm: 10,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
-    }
-
-    const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
-
-    expect(after.photos.map((p) => p.id)).toEqual(['photo-2'])
-    expect(after.placements.map((p) => p.id)).toEqual(['pl-3'])
-  })
-
-  it('clears selection if a placement of the deleted photo was selected', () => {
-    const seeded: ReturnType<typeof appReducer> = {
-      ...initialState,
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
-      ],
-      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 500, heightCm: 300 }],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 10,
-          yCm: 10,
-          longEdgeCm: 42,
-        },
+        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 42 },
+        { id: 'pl-2', photoId: 'photo-1', wallId: 'w2', xCm: 100, yCm: 80, longEdgeCm: 42 },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
 
-    const after = appReducer(seeded, { type: 'deletePhoto', id: 'photo-1' })
+    const after = appReducer(seeded, { type: 'deleteSelection' })
 
-    expect(after.ui.selectedPlacementIds).toEqual([])
+    // pl-1 removed, pl-2 (same photo, other wall) untouched.
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-2'])
+    // The photo metadata is preserved — its blob may stay in storage.
+    expect(after.photos.map((p) => p.id)).toEqual(['photo-1'])
   })
 })
 
@@ -734,12 +609,6 @@ describe('multi-select', () => {
 
   it('deleteSelection removes every selected placement and clears the selection', () => {
     const after = appReducer(seeded(['pl-1', 'pl-3']), { type: 'deleteSelection' })
-    expect(after.placements.map((p) => p.id)).toEqual(['pl-2'])
-    expect(after.ui.selectedPlacementIds).toEqual([])
-  })
-
-  it('sendSelectionToTray removes every selected placement and clears the selection', () => {
-    const after = appReducer(seeded(['pl-1', 'pl-3']), { type: 'sendSelectionToTray' })
     expect(after.placements.map((p) => p.id)).toEqual(['pl-2'])
     expect(after.ui.selectedPlacementIds).toEqual([])
   })

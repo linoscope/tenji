@@ -31,19 +31,19 @@ function seededState(): AppState {
   })
   s = appReducer(s, { type: 'selectWall', id: 'w1' })
   s = appReducer(s, {
-    type: 'addPhoto',
-    id: 'ph1',
-    filename: 'a.jpg',
-    blobKey: 'k1',
-    aspectRatio: 1.5,
-  })
-  s = appReducer(s, {
-    type: 'placePhoto',
-    id: 'pl1',
-    photoId: 'ph1',
-    wallId: 'w1',
-    xCm: 100,
-    yCm: 100,
+    type: 'importPhotos',
+    items: [
+      {
+        photoId: 'ph1',
+        filename: 'a.jpg',
+        blobKey: 'k1',
+        aspectRatio: 1.5,
+        placementId: 'pl1',
+        wallId: 'w1',
+        xCm: 100,
+        yCm: 100,
+      },
+    ],
   })
   return s
 }

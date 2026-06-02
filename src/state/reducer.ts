@@ -17,6 +17,17 @@ export const initialState: AppState = {
   },
 }
 
+export type ImportPhotoItem = {
+  photoId: string
+  filename: string
+  blobKey: string
+  aspectRatio: number
+  placementId: string
+  wallId: string
+  xCm: number
+  yCm: number
+}
+
 export type Action =
   | {
       type: 'createWall'
@@ -29,21 +40,7 @@ export type Action =
   | { type: 'renameWall'; id: string; name: string }
   | { type: 'resizeWall'; id: string; widthCm: number; heightCm: number }
   | { type: 'deleteWall'; id: string }
-  | {
-      type: 'addPhoto'
-      id: string
-      filename: string
-      blobKey: string
-      aspectRatio: number
-    }
-  | {
-      type: 'placePhoto'
-      id: string
-      photoId: string
-      wallId: string
-      xCm: number
-      yCm: number
-    }
+  | { type: 'importPhotos'; items: ImportPhotoItem[] }
   | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
   | { type: 'moveSelection'; dxCm: number; dyCm: number }
   | { type: 'resizePlacement'; id: string; longEdgeCm: number }
@@ -51,10 +48,7 @@ export type Action =
   | { type: 'toggleSelectPlacement'; id: string }
   | { type: 'setSelection'; ids: string[] }
   | { type: 'clearSelection' }
-  | { type: 'sendPlacementToTray'; id: string }
-  | { type: 'sendSelectionToTray' }
   | { type: 'deleteSelection' }
-  | { type: 'deletePhoto'; id: string }
   | { type: 'toggleRuler' }
   | { type: 'toggleSilhouette' }
   | { type: 'hydrate'; state: AppState }
@@ -145,28 +139,30 @@ export function appReducer(state: AppState, action: Action): AppState {
             : w,
         ),
       }
-    case 'addPhoto': {
-      const photo = {
-        id: action.id,
-        filename: action.filename,
-        blobKey: action.blobKey,
-        aspectRatio: action.aspectRatio,
-      }
-      return { ...state, photos: [...state.photos, photo] }
-    }
-    case 'placePhoto': {
-      const placement = {
-        id: action.id,
-        photoId: action.photoId,
-        wallId: action.wallId,
-        xCm: action.xCm,
-        yCm: action.yCm,
+    case 'importPhotos': {
+      if (action.items.length === 0) return state
+      const newPhotos = action.items.map((it) => ({
+        id: it.photoId,
+        filename: it.filename,
+        blobKey: it.blobKey,
+        aspectRatio: it.aspectRatio,
+      }))
+      const newPlacements = action.items.map((it) => ({
+        id: it.placementId,
+        photoId: it.photoId,
+        wallId: it.wallId,
+        xCm: it.xCm,
+        yCm: it.yCm,
         longEdgeCm: DEFAULT_PLACEMENT_LONG_EDGE_CM,
-      }
+      }))
       return {
         ...state,
-        placements: [...state.placements, placement],
-        ui: { ...state.ui, selectedPlacementIds: [placement.id] },
+        photos: [...state.photos, ...newPhotos],
+        placements: [...state.placements, ...newPlacements],
+        ui: {
+          ...state.ui,
+          selectedPlacementIds: newPlacements.map((p) => p.id),
+        },
       }
     }
     case 'movePlacement':
@@ -215,27 +211,6 @@ export function appReducer(state: AppState, action: Action): AppState {
       }
     case 'clearSelection':
       return { ...state, ui: { ...state.ui, selectedPlacementIds: [] } }
-    case 'sendPlacementToTray': {
-      const placements = state.placements.filter((p) => p.id !== action.id)
-      const selectedPlacementIds = state.ui.selectedPlacementIds.filter(
-        (id) => id !== action.id,
-      )
-      return {
-        ...state,
-        placements,
-        ui: { ...state.ui, selectedPlacementIds },
-      }
-    }
-    case 'sendSelectionToTray': {
-      const selected = new Set(state.ui.selectedPlacementIds)
-      if (selected.size === 0) return state
-      const placements = state.placements.filter((p) => !selected.has(p.id))
-      return {
-        ...state,
-        placements,
-        ui: { ...state.ui, selectedPlacementIds: [] },
-      }
-    }
     case 'deleteSelection': {
       const selected = new Set(state.ui.selectedPlacementIds)
       if (selected.size === 0) return state
@@ -244,24 +219,6 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         placements,
         ui: { ...state.ui, selectedPlacementIds: [] },
-      }
-    }
-    case 'deletePhoto': {
-      const photos = state.photos.filter((p) => p.id !== action.id)
-      const removedPlacementIds = new Set(
-        state.placements.filter((p) => p.photoId === action.id).map((p) => p.id),
-      )
-      const placements = state.placements.filter(
-        (p) => p.photoId !== action.id,
-      )
-      const selectedPlacementIds = state.ui.selectedPlacementIds.filter(
-        (id) => !removedPlacementIds.has(id),
-      )
-      return {
-        ...state,
-        photos,
-        placements,
-        ui: { ...state.ui, selectedPlacementIds },
       }
     }
     case 'deleteWall': {

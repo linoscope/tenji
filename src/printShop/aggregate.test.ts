@@ -133,4 +133,50 @@ describe('aggregatePrintRows', () => {
 
     expect(aggregatePrintRows({ photos, placements, walls })).toEqual([])
   })
+
+  it('excludes placements whose center is outside the wall bounds (margin-parked)', () => {
+    const photos = [photo({ id: 'p1', aspectRatio: 1 })]
+    const walls = [wall('w1', 'North')] // 500 x 300
+    const onWall: Placement = {
+      id: 'pl-on',
+      photoId: 'p1',
+      wallId: 'w1',
+      xCm: 250,
+      yCm: 150,
+      longEdgeCm: 42,
+    }
+    const inMargin: Placement = {
+      id: 'pl-margin',
+      photoId: 'p1',
+      wallId: 'w1',
+      xCm: 250,
+      yCm: 400, // below the wall
+      longEdgeCm: 42,
+    }
+    const offLeft: Placement = {
+      id: 'pl-off-left',
+      photoId: 'p1',
+      wallId: 'w1',
+      xCm: -10,
+      yCm: 150,
+      longEdgeCm: 42,
+    }
+
+    const rows = aggregatePrintRows({
+      photos,
+      placements: [onWall, inMargin, offLeft],
+      walls,
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].count).toBe(1)
+  })
+
+  it('excludes placements whose wall no longer exists', () => {
+    const photos = [photo({ id: 'p1', aspectRatio: 1 })]
+    const walls = [wall('w1', 'North')]
+    const placements = [placement('pl1', 'p1', 'ghost-wall', 42)]
+
+    expect(aggregatePrintRows({ photos, placements, walls })).toEqual([])
+  })
 })

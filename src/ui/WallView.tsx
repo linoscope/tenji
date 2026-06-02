@@ -24,7 +24,6 @@ type WallViewProps = {
   selectedPlacementIds: string[]
   rulerEnabled: boolean
   silhouetteEnabled: boolean
-  onDropPhoto: (input: { photoId: string; xCm: number; yCm: number }) => void
   onSelectPlacement: (id: string) => void
   onToggleSelectPlacement: (id: string) => void
   onClearSelection: () => void
@@ -33,7 +32,6 @@ type WallViewProps = {
   onResizePlacement: (id: string, longEdgeCm: number) => void
 }
 
-const PHOTO_MIME = 'application/x-tenji-photo'
 const SNAP_TOLERANCE_CM = 1
 
 type LiveDrag = {
@@ -70,7 +68,6 @@ export default function WallView({
   selectedPlacementIds,
   rulerEnabled,
   silhouetteEnabled,
-  onDropPhoto,
   onSelectPlacement,
   onToggleSelectPlacement,
   onClearSelection,
@@ -96,23 +93,6 @@ export default function WallView({
   } | null>(null)
   /** Records the most recent click's shift state so onMoveStart can branch. */
   const lastClickShiftRef = useRef(false)
-
-  const onDragOver = (e: React.DragEvent) => {
-    if (Array.from(e.dataTransfer.types).includes(PHOTO_MIME)) {
-      e.preventDefault()
-    }
-  }
-  const onDrop = (e: React.DragEvent) => {
-    if (!Array.from(e.dataTransfer.types).includes(PHOTO_MIME)) return
-    e.preventDefault()
-    e.stopPropagation()
-    const photoId = e.dataTransfer.getData(PHOTO_MIME)
-    if (!photoId || scale <= 0) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const xCm = (e.clientX - rect.left) / scale
-    const yCm = (e.clientY - rect.top) / scale
-    onDropPhoto({ photoId, xCm, yCm })
-  }
 
   const onWallMouseDown = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClearSelection()
@@ -199,8 +179,6 @@ export default function WallView({
       ref={(node) => {
         if (wallRef) wallRef.current = node
       }}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
       onMouseDown={onWallMouseDown}
       style={{
         position: 'relative',

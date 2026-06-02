@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { createMemoryStatePort } from './storage/port'
@@ -17,6 +17,32 @@ function seededPort() {
   return createMemoryStatePort(saved)
 }
 
+/** Seed a wall + photo + single placement (centered on the wall by default). */
+function seededWithSinglePlacement(selectedIds: string[] = []) {
+  return {
+    photos: [
+      { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+    ],
+    walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+    placements: [
+      {
+        id: 'pl-1',
+        photoId: 'photo-1',
+        wallId: 'w1',
+        xCm: 100,
+        yCm: 60,
+        longEdgeCm: 42,
+      },
+    ],
+    ui: {
+      activeWallId: 'w1',
+      selectedPlacementIds: selectedIds,
+      rulerEnabled: true,
+      silhouetteEnabled: true,
+    },
+  }
+}
+
 /** jsdom lacks createObjectURL; stub it so tray thumbnails render. */
 beforeAll(() => {
   if (!URL.createObjectURL) {
@@ -30,23 +56,6 @@ beforeAll(() => {
 const fakeImageOps = {
   decodeImage: async () => ({ width: 3000, height: 2000 }),
   downscale: async (file: Blob) => ({ blob: file, width: 1500, height: 1000 }),
-}
-
-/**
- * jsdom's DragEvent ignores clientX/Y from init; build a real DragEvent and
- * pin the coordinates so the wall's drop handler can convert them to cm.
- */
-function fireDropAt(
-  el: Element,
-  init: { dataTransfer: unknown; clientX: number; clientY: number },
-) {
-  const event = new Event('drop', { bubbles: true, cancelable: true })
-  Object.defineProperty(event, 'dataTransfer', { value: init.dataTransfer })
-  Object.defineProperty(event, 'clientX', { value: init.clientX })
-  Object.defineProperty(event, 'clientY', { value: init.clientY })
-  act(() => {
-    el.dispatchEvent(event)
-  })
 }
 
 describe('App', () => {
@@ -127,7 +136,42 @@ describe('App', () => {
     })
   })
 
-  it('imports a photo via the file picker and shows it in the tray', async () => {
+  it('a batch import tiles in a wrapping row along the bottom margin without overlapping', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    const input = screen.getByLabelText(/import photos/i) as HTMLInputElement
+    await user.upload(input, [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+      new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
+    ])
+
+    // 3 imports: createId is called 3 times for photos (1..3), then 3 times
+    // for placements (4..6).
+    const a = await screen.findByTestId('placement-id-4')
+    const b = await screen.findByTestId('placement-id-5')
+    const c = await screen.findByTestId('placement-id-6')
+
+    // All three sit in the margin below the wall (y > 300).
+    for (const el of [a, b, c]) {
+      expect(Number(el.getAttribute('data-y-cm'))).toBeGreaterThan(300)
+    }
+    // Centers are distinct → they don't stack on top of each other.
+    const xs = [a, b, c].map((e) => Number(e.getAttribute('data-x-cm')))
+    expect(new Set(xs).size).toBe(3)
+  })
+
+  it('imports a photo via the file picker and places it in the wall margin', async () => {
     const user = userEvent.setup()
     let n = 0
     render(
@@ -145,10 +189,14 @@ describe('App', () => {
     const input = screen.getByLabelText(/import photos/i) as HTMLInputElement
     await user.upload(input, file)
 
-    await waitFor(() =>
-      expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument(),
-    )
+    // First createId for the photo, second for the placement.
+    const placement = await screen.findByTestId('placement-photo-2')
+    expect(placement).toHaveAttribute('data-photo-id', 'photo-1')
+    // The placement center sits in the margin below the wall (wall height 300).
+    expect(Number(placement.getAttribute('data-y-cm'))).toBeGreaterThan(300)
     expect(screen.getByAltText('cat.jpg')).toBeInTheDocument()
+    // The old tray panel is gone.
+    expect(screen.queryByTestId('tray-photo-photo-1')).not.toBeInTheDocument()
   })
 
   it('stores the imported blob in the blob store under the photo id', async () => {
@@ -178,11 +226,12 @@ describe('App', () => {
     const user = userEvent.setup()
     const port = seededPort()
     const blobStore = createMemoryBlobStore()
+    let n = 0
     const { unmount } = render(
       <App
         port={port}
         blobStore={blobStore}
-        createId={() => 'photo-1'}
+        createId={() => `photo-${++n}`}
         imageOps={fakeImageOps}
       />,
     )
@@ -193,9 +242,7 @@ describe('App', () => {
       new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
     )
 
-    await waitFor(() =>
-      expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument(),
-    )
+    await screen.findByTestId('placement-photo-2')
 
     unmount()
 
@@ -208,16 +255,17 @@ describe('App', () => {
       />,
     )
 
-    expect(await screen.findByTestId('tray-photo-photo-1')).toBeInTheDocument()
+    expect(await screen.findByTestId('placement-photo-2')).toBeInTheDocument()
     expect(screen.getByAltText('cat.jpg')).toBeInTheDocument()
   })
 
   it('imports photos when files are dropped onto the app', async () => {
+    let n = 0
     render(
       <App
         port={seededPort()}
         blobStore={createMemoryBlobStore()}
-        createId={() => 'photo-drop'}
+        createId={() => `photo-${++n}`}
         imageOps={fakeImageOps}
       />,
     )
@@ -228,18 +276,18 @@ describe('App', () => {
       dataTransfer: { files: [file], types: ['Files'] },
     })
 
-    await waitFor(() =>
-      expect(screen.getByTestId('tray-photo-photo-drop')).toBeInTheDocument(),
-    )
+    const placement = await screen.findByTestId('placement-photo-2')
+    expect(placement).toHaveAttribute('data-photo-id', 'photo-1')
     expect(screen.getByAltText('dropped.jpg')).toBeInTheDocument()
   })
 
   it('imports photos pasted from the clipboard', async () => {
+    let n = 0
     render(
       <App
         port={seededPort()}
         blobStore={createMemoryBlobStore()}
-        createId={() => 'photo-paste'}
+        createId={() => `photo-${++n}`}
         imageOps={fakeImageOps}
       />,
     )
@@ -260,57 +308,61 @@ describe('App', () => {
     })
     window.dispatchEvent(event)
 
-    await waitFor(() =>
-      expect(screen.getByTestId('tray-photo-photo-paste')).toBeInTheDocument(),
-    )
+    const placement = await screen.findByTestId('placement-photo-2')
+    expect(placement).toHaveAttribute('data-photo-id', 'photo-1')
     expect(screen.getByAltText('pasted.png')).toBeInTheDocument()
   })
 
-  it('shares the tray across walls (photo visible after switching walls)', async () => {
-    const user = userEvent.setup()
-    let n = 0
+  it('dragging a placement into the margin sets it aside (y > wallHeight)', async () => {
+    // Seed a placement on the wall and drag it down into the bottom margin.
+    const seeded = seededWithSinglePlacement()
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
+    const placement = await screen.findByTestId('placement-pl-1')
 
-    // Add a second wall and switch to it.
-    await user.click(screen.getByRole('button', { name: /add wall/i }))
-    // After clicking "Add wall", the new wall is now active.
-    expect(screen.getByTestId('tray-photo-id-1')).toBeInTheDocument()
+    // The seeded placement starts at y=60 (inside the wall).
+    fireEvent.mouseDown(placement, { clientX: 100, clientY: 60 })
+    fireEvent.mouseMove(window, { clientX: 100, clientY: 700 })
+    fireEvent.mouseUp(window, { clientX: 100, clientY: 700 })
+
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-pl-1')
+      expect(Number(after.getAttribute('data-y-cm'))).toBeGreaterThan(300)
+    })
   })
 
-  it('places a photo on the wall when a tray photo is dragged onto it', async () => {
-    const user = userEvent.setup()
-    let n = 0
+  it('a margin-parked placement can be dragged onto the wall to use it', async () => {
+    // Seed a placement parked in the bottom margin and drag it onto the wall.
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        // Centre in the bottom margin (y > heightCm).
+        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 250, yCm: 360, longEdgeCm: 42 },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+    }
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
+    const placement = await screen.findByTestId('placement-pl-1')
+    expect(Number(placement.getAttribute('data-y-cm'))).toBeGreaterThan(300)
 
-    // Pin a real-looking bounding rect on the wall so cm coordinates resolve.
     const wall = screen.getByTestId('wall') as HTMLElement
     wall.getBoundingClientRect = () =>
       ({
@@ -325,70 +377,35 @@ describe('App', () => {
         toJSON() {},
       }) as DOMRect
 
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: (t: string) =>
-        t === 'application/x-tenji-photo' ? 'id-1' : '',
-      files: { length: 0 } as unknown as FileList,
-    }
+    // Drag the margin placement up into the wall area.
+    fireEvent.mouseDown(placement, { clientX: 250, clientY: 360 })
+    fireEvent.mouseMove(window, { clientX: 250, clientY: 150 })
+    fireEvent.mouseUp(window, { clientX: 250, clientY: 150 })
 
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    const placement = await screen.findByTestId('placement-id-2')
-    expect(placement).toHaveAttribute('data-photo-id', 'id-1')
-    expect(placement).toHaveAttribute('data-long-edge-cm', '42')
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-pl-1')
+      expect(Number(after.getAttribute('data-y-cm'))).toBeLessThan(300)
+    })
   })
 
   it('selects a placement on click and deselects when the wall is clicked', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement()
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
+    const placement = await screen.findByTestId('placement-pl-1')
     const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    const placement = await screen.findByTestId('placement-id-2')
-    // Selected on creation.
-    expect(placement).toHaveAttribute('data-selected', 'true')
 
     // Click empty wall to deselect.
     fireEvent.mouseDown(wall, { clientX: 5, clientY: 5 })
     await waitFor(() =>
-      expect(screen.getByTestId('placement-id-2')).toHaveAttribute(
+      expect(screen.getByTestId('placement-pl-1')).toHaveAttribute(
         'data-selected',
         'false',
       ),
@@ -397,7 +414,7 @@ describe('App', () => {
     // Click the placement to reselect.
     fireEvent.mouseDown(placement, { clientX: 10, clientY: 10 })
     await waitFor(() =>
-      expect(screen.getByTestId('placement-id-2')).toHaveAttribute(
+      expect(screen.getByTestId('placement-pl-1')).toHaveAttribute(
         'data-selected',
         'true',
       ),
@@ -405,47 +422,17 @@ describe('App', () => {
   })
 
   it('moves a placement by dragging it', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement()
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    const placement = await screen.findByTestId('placement-id-2')
+    const placement = await screen.findByTestId('placement-pl-1')
     const initialX = Number(placement.getAttribute('data-x-cm'))
     const initialY = Number(placement.getAttribute('data-y-cm'))
 
@@ -455,65 +442,35 @@ describe('App', () => {
     fireEvent.mouseUp(window, { clientX: 150, clientY: 90 })
 
     await waitFor(() => {
-      const after = screen.getByTestId('placement-id-2')
+      const after = screen.getByTestId('placement-pl-1')
       expect(Number(after.getAttribute('data-x-cm'))).toBeGreaterThan(initialX)
       expect(Number(after.getAttribute('data-y-cm'))).toBeGreaterThan(initialY)
     })
   })
 
   it('shows corner resize handles only on the selected placement', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement(['pl-1'])
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    const placement = await screen.findByTestId('placement-id-2')
+    const placement = await screen.findByTestId('placement-pl-1')
     expect(placement).toHaveAttribute('data-selected', 'true')
-    // 4 corners while selected.
     expect(
       placement.querySelectorAll('[data-resize-handle]'),
     ).toHaveLength(4)
 
     // Deselect → no handles.
+    const wall = screen.getByTestId('wall') as HTMLElement
     fireEvent.mouseDown(wall, { clientX: 5, clientY: 5 })
     await waitFor(() =>
       expect(
-        screen.getByTestId('placement-id-2').querySelectorAll(
+        screen.getByTestId('placement-pl-1').querySelectorAll(
           '[data-resize-handle]',
         ),
       ).toHaveLength(0),
@@ -521,47 +478,17 @@ describe('App', () => {
   })
 
   it('resizes a placement when a corner handle is dragged outward', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement(['pl-1'])
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    const placement = await screen.findByTestId('placement-id-2')
+    const placement = await screen.findByTestId('placement-pl-1')
     const initialLongEdge = Number(placement.getAttribute('data-long-edge-cm'))
 
     const handle = placement.querySelector(
@@ -569,13 +496,12 @@ describe('App', () => {
     ) as HTMLElement
     expect(handle).toBeTruthy()
 
-    // Drag the SE corner outward (away from the photo's center at 100,60).
     fireEvent.mouseDown(handle, { clientX: 120, clientY: 80 })
     fireEvent.mouseMove(window, { clientX: 200, clientY: 160 })
     fireEvent.mouseUp(window, { clientX: 200, clientY: 160 })
 
     await waitFor(() => {
-      const after = screen.getByTestId('placement-id-2')
+      const after = screen.getByTestId('placement-pl-1')
       expect(Number(after.getAttribute('data-long-edge-cm'))).toBeGreaterThan(
         initialLongEdge,
       )
@@ -583,50 +509,17 @@ describe('App', () => {
   })
 
   it('shows an inspector with size label and W×H cm for the selected placement', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement(['pl-1'])
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    await screen.findByTestId('placement-id-2')
-
-    // Default size is A3 (42 cm long edge); aspectRatio = 3000/2000 = 1.5
-    // → width 42, height 28.
+    await screen.findByTestId('placement-pl-1')
     const inspector = await screen.findByTestId('placement-inspector')
     expect(inspector).toHaveTextContent('A3')
     expect(inspector).toHaveTextContent(/42\s*×\s*28\s*cm/)
@@ -634,52 +527,23 @@ describe('App', () => {
 
   it('changes a placement size when an A-series preset is picked in the inspector', async () => {
     const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement(['pl-1'])
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    await screen.findByTestId('placement-id-2')
+    await screen.findByTestId('placement-pl-1')
 
     // Pick A2 (long edge 59.4 cm).
     await user.click(screen.getByRole('button', { name: 'A2' }))
 
     await waitFor(() => {
-      const placement = screen.getByTestId('placement-id-2')
+      const placement = screen.getByTestId('placement-pl-1')
       expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(
         59.4,
       )
@@ -688,56 +552,25 @@ describe('App', () => {
   })
 
   it('changes a placement size via the custom long-edge input in the inspector', async () => {
-    const user = userEvent.setup()
-    let n = 0
+    const seeded = seededWithSinglePlacement(['pl-1'])
     render(
       <App
-        port={seededPort()}
+        port={createMemoryStatePort(seeded)}
         blobStore={createMemoryBlobStore()}
-        createId={() => `id-${++n}`}
+        createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
 
-    await screen.findByText('North Wall')
-    await user.upload(
-      screen.getByLabelText(/import photos/i) as HTMLInputElement,
-      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
-    )
-    await screen.findByTestId('tray-photo-id-1')
-
-    const wall = screen.getByTestId('wall') as HTMLElement
-    wall.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 500,
-        bottom: 300,
-        width: 500,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON() {},
-      }) as DOMRect
-
-    const dataTransfer = {
-      types: ['application/x-tenji-photo'],
-      getData: () => 'id-1',
-      files: { length: 0 } as unknown as FileList,
-    }
-    fireEvent.dragOver(wall, { dataTransfer })
-    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
-
-    await screen.findByTestId('placement-id-2')
+    await screen.findByTestId('placement-pl-1')
 
     const input = screen.getByLabelText(/long edge/i)
     fireEvent.change(input, { target: { value: '50' } })
 
     await waitFor(() => {
-      const placement = screen.getByTestId('placement-id-2')
+      const placement = screen.getByTestId('placement-pl-1')
       expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(50)
     })
-    // 50 cm long edge, aspect 1.5 → 50 × 33.33 cm; not a preset → "Custom".
     expect(screen.getByTestId('placement-inspector')).toHaveTextContent('Custom')
   })
 
@@ -911,7 +744,61 @@ describe('App', () => {
     })
   })
 
-  it('sends a placement to the tray via the inspector (placement removed, photo kept)', async () => {
+  it('inspector Delete removes ONLY the selected placement instance — other copies of the same photo stay', async () => {
+    const user = userEvent.setup()
+    const seeded = {
+      photos: [
+        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'East Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'photo-1',
+          wallId: 'w2',
+          xCm: 100,
+          yCm: 100,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
+    }
+    render(
+      <App
+        port={createMemoryStatePort(seeded)}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-inspector')
+
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    // pl-1 on the active wall is gone.
+    await waitFor(() =>
+      expect(screen.queryByTestId('placement-pl-1')).not.toBeInTheDocument(),
+    )
+    // Inspector goes away because nothing is selected.
+    expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument()
+    // The other instance on a different wall is untouched.
+    fireEvent.click(screen.getByRole('button', { name: /east wall/i }))
+    expect(await screen.findByTestId('placement-pl-2')).toBeInTheDocument()
+  })
+
+  it('a photo with no remaining placements simply disappears from view (instance-level delete)', async () => {
     const user = userEvent.setup()
     const seeded = {
       photos: [
@@ -940,79 +827,13 @@ describe('App', () => {
     )
 
     await screen.findByTestId('placement-inspector')
-
-    await user.click(screen.getByRole('button', { name: /send to tray/i }))
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
 
     await waitFor(() =>
       expect(screen.queryByTestId('placement-pl-1')).not.toBeInTheDocument(),
     )
-    // Photo remains in the tray.
-    expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument()
-    // Inspector goes away because nothing is selected.
-    expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument()
-  })
-
-  it('deletes a photo (and all its placements across walls) via the inspector', async () => {
-    const user = userEvent.setup()
-    const seeded = {
-      photos: [
-        { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 },
-        { id: 'photo-2', filename: 'b.jpg', blobKey: 'b2', aspectRatio: 1 },
-      ],
-      walls: [
-        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
-        { id: 'w2', name: 'East Wall', widthCm: 500, heightCm: 300 },
-      ],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-2',
-          photoId: 'photo-1',
-          wallId: 'w2',
-          xCm: 100,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-3',
-          photoId: 'photo-2',
-          wallId: 'w1',
-          xCm: 300,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
-    }
-    render(
-      <App
-        port={createMemoryStatePort(seeded)}
-        blobStore={createMemoryBlobStore()}
-        createId={() => 'unused'}
-        imageOps={fakeImageOps}
-      />,
-    )
-
-    await screen.findByTestId('placement-inspector')
-
-    await user.click(screen.getByRole('button', { name: /^delete$/i }))
-
-    // Photo gone from tray.
-    await waitFor(() =>
-      expect(screen.queryByTestId('tray-photo-photo-1')).not.toBeInTheDocument(),
-    )
-    // Both placements of photo-1 gone, across both walls.
-    expect(screen.queryByTestId('placement-pl-1')).not.toBeInTheDocument()
-    // Other photo + placement still present.
-    expect(screen.getByTestId('tray-photo-photo-2')).toBeInTheDocument()
-    expect(screen.getByTestId('placement-pl-3')).toBeInTheDocument()
+    // No tray panel — the old tray-photo-* tile must never appear.
+    expect(screen.queryByTestId('tray-photo-photo-1')).not.toBeInTheDocument()
   })
 
   it('persists a parked placement (out-of-bounds position) across reload', async () => {
@@ -1234,11 +1055,11 @@ describe('App', () => {
     expect(screen.queryByTestId('overlay-floor')).not.toBeInTheDocument()
   })
 
-  it('shows a print-shop table with one row per (photo, size), excluding tray-only photos', async () => {
+  it('shows a print-shop table with one row per (photo, size), excluding margin-parked placements', async () => {
     const seeded = {
       photos: [
         { id: 'photo-1', filename: 'sunset.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
-        { id: 'photo-2', filename: 'tray-only.jpg', blobKey: 'b2', aspectRatio: 1 },
+        { id: 'photo-2', filename: 'parked.jpg', blobKey: 'b2', aspectRatio: 1 },
       ],
       walls: [
         { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
@@ -1259,6 +1080,15 @@ describe('App', () => {
           wallId: 'w2',
           xCm: 100,
           yCm: 100,
+          longEdgeCm: 42,
+        },
+        // photo-2 only has a margin-parked placement, so it should not count.
+        {
+          id: 'pl-parked',
+          photoId: 'photo-2',
+          wallId: 'w1',
+          xCm: 250,
+          yCm: 400, // below the wall
           longEdgeCm: 42,
         },
       ],
@@ -1293,11 +1123,10 @@ describe('App', () => {
     expect(row).toHaveTextContent('landscape')
     expect(row).toHaveTextContent('North Wall')
     expect(row).toHaveTextContent('South Wall')
-    // Count = 2 (placed on both walls).
     expect(row.querySelector('[data-cell="count"]')?.textContent).toBe('2')
 
-    // Tray-only photo is excluded from the print-shop table.
-    expect(table).not.toHaveTextContent('tray-only.jpg')
+    // Margin-parked placement is excluded from the print-shop table.
+    expect(table).not.toHaveTextContent('parked.jpg')
   })
 
   it('downloads a CSV file with one row per (photo, size) when CSV is clicked', async () => {
@@ -1354,163 +1183,18 @@ describe('App', () => {
     expect(text).toContain('sunset.jpg,A3,42,28,landscape,1,North Wall')
   })
 
-  it('marks a placed tray photo: dimmed, captioned with the wall name, still draggable', async () => {
-    const seeded = {
-      photos: [
-        { id: 'placed-photo', filename: 'placed.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
-        { id: 'tray-only', filename: 'tray.jpg', blobKey: 'b2', aspectRatio: 1 },
-      ],
-      walls: [
-        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
-      ],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'placed-photo',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: {
-        activeWallId: 'w1',
-        selectedPlacementIds: [],
-        rulerEnabled: true,
-        silhouetteEnabled: true,
-      },
-    }
-
+  it('the photo tray panel is gone (margin-as-tray model)', async () => {
     render(
       <App
-        port={createMemoryStatePort(seeded)}
+        port={createMemoryStatePort(seededWithSinglePlacement())}
         blobStore={createMemoryBlobStore()}
         createId={() => 'unused'}
         imageOps={fakeImageOps}
       />,
     )
-
-    const placedTile = await screen.findByTestId('tray-photo-placed-photo')
-    expect(placedTile).toHaveAttribute('data-placed', 'true')
-    // Dimmed when placed.
-    expect(placedTile).toHaveStyle({ opacity: '0.5' })
-    // Caption shows the single wall name.
-    expect(
-      screen.getByTestId('tray-caption-placed-photo'),
-    ).toHaveTextContent('North Wall')
-    // Still draggable so the user can place it again on another wall.
-    expect(placedTile).toHaveAttribute('draggable', 'true')
-
-    // Unplaced tile is not dimmed and has no caption.
-    const trayOnly = screen.getByTestId('tray-photo-tray-only')
-    expect(trayOnly).toHaveAttribute('data-placed', 'false')
-    expect(trayOnly).toHaveStyle({ opacity: '1' })
-    expect(
-      screen.queryByTestId('tray-caption-tray-only'),
-    ).not.toBeInTheDocument()
-  })
-
-  it("captions a placed tray photo as 'On: N walls' when it spans multiple walls", async () => {
-    const seeded = {
-      photos: [
-        { id: 'multi-photo', filename: 'multi.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
-      ],
-      walls: [
-        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
-        { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
-      ],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'multi-photo',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-        {
-          id: 'pl-2',
-          photoId: 'multi-photo',
-          wallId: 'w2',
-          xCm: 200,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: {
-        activeWallId: 'w1',
-        selectedPlacementIds: [],
-        rulerEnabled: true,
-        silhouetteEnabled: true,
-      },
-    }
-
-    render(
-      <App
-        port={createMemoryStatePort(seeded)}
-        blobStore={createMemoryBlobStore()}
-        createId={() => 'unused'}
-        imageOps={fakeImageOps}
-      />,
-    )
-
-    await screen.findByTestId('tray-photo-multi-photo')
-    expect(
-      screen.getByTestId('tray-caption-multi-photo'),
-    ).toHaveTextContent('On: 2 walls')
-  })
-
-  it('reverts a placed tray photo to the unplaced look when its last placement is removed', async () => {
-    const user = userEvent.setup()
-    const seeded = {
-      photos: [
-        { id: 'photo-1', filename: 'p1.jpg', blobKey: 'b1', aspectRatio: 3 / 2 },
-      ],
-      walls: [
-        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
-      ],
-      placements: [
-        {
-          id: 'pl-1',
-          photoId: 'photo-1',
-          wallId: 'w1',
-          xCm: 100,
-          yCm: 100,
-          longEdgeCm: 42,
-        },
-      ],
-      ui: {
-        activeWallId: 'w1',
-        selectedPlacementIds: ['pl-1'],
-        rulerEnabled: true,
-        silhouetteEnabled: true,
-      },
-    }
-
-    render(
-      <App
-        port={createMemoryStatePort(seeded)}
-        blobStore={createMemoryBlobStore()}
-        createId={() => 'unused'}
-        imageOps={fakeImageOps}
-      />,
-    )
-
-    const tile = await screen.findByTestId('tray-photo-photo-1')
-    expect(tile).toHaveAttribute('data-placed', 'true')
-
-    // Inspector is open because the placement is selected; sending to tray
-    // removes the last placement.
-    await user.click(screen.getByRole('button', { name: /send to tray/i }))
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId('tray-photo-photo-1'),
-      ).toHaveAttribute('data-placed', 'false')
-    })
-    expect(
-      screen.queryByTestId('tray-caption-photo-1'),
-    ).not.toBeInTheDocument()
+    await screen.findByTestId('placement-pl-1')
+    // No tray strip and no per-photo tray tiles.
+    expect(screen.queryByTestId('tray-photo-photo-1')).not.toBeInTheDocument()
   })
 
   it('shift-clicks add to selection and show the group inspector with no handles', async () => {
@@ -1694,7 +1378,7 @@ describe('App', () => {
     )
   })
 
-  it('group inspector Send all to tray removes every selected placement', async () => {
+  it('group inspector Delete all removes every selected placement', async () => {
     const user = userEvent.setup()
     const seeded = {
       photos: [
@@ -1719,15 +1403,12 @@ describe('App', () => {
 
     await screen.findByTestId('group-inspector')
 
-    await user.click(screen.getByRole('button', { name: /send all to tray/i }))
+    await user.click(screen.getByRole('button', { name: /delete all/i }))
 
     await waitFor(() =>
       expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument(),
     )
     expect(screen.queryByTestId('placement-pl-b')).not.toBeInTheDocument()
-    // Photos remain in the tray.
-    expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument()
-    expect(screen.getByTestId('tray-photo-photo-2')).toBeInTheDocument()
   })
 
   describe('project export/import', () => {

@@ -99,27 +99,19 @@ function classify(
       return { kind: 'document', mergeKey: `resizeWall:${action.id}` }
     case 'deleteWall':
       return { kind: 'document', mergeKey: `deleteWall:${action.id}` }
-    case 'addPhoto':
-      return { kind: 'document', mergeKey: `addPhoto:${action.id}` }
-    case 'placePhoto':
-      return { kind: 'document', mergeKey: `placePhoto:${action.id}` }
+    case 'importPhotos': {
+      // Unique key per dispatch so successive batch imports never coalesce.
+      const ids = action.items.map((i) => i.placementId).join(',')
+      return { kind: 'document', mergeKey: `importPhotos:${ids}` }
+    }
     case 'movePlacement':
       return { kind: 'document', mergeKey: `movePlacement:${action.id}` }
     case 'moveSelection':
       return { kind: 'document', mergeKey: 'moveSelection' }
     case 'resizePlacement':
       return { kind: 'document', mergeKey: `resizePlacement:${action.id}` }
-    case 'sendPlacementToTray':
-      return {
-        kind: 'document',
-        mergeKey: `sendPlacementToTray:${action.id}`,
-      }
-    case 'sendSelectionToTray':
-      return { kind: 'document', mergeKey: 'sendSelectionToTray' }
     case 'deleteSelection':
       return { kind: 'document', mergeKey: 'deleteSelection' }
-    case 'deletePhoto':
-      return { kind: 'document', mergeKey: `deletePhoto:${action.id}` }
   }
 }
 
