@@ -16,6 +16,7 @@ type WallStageProps = {
   onSelectPlacement: (id: string) => void
   onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
+  onResizePlacement: (id: string, longEdgeCm: number) => void
 }
 
 /**
@@ -32,6 +33,7 @@ export default function WallStage({
   onSelectPlacement,
   onClearSelection,
   onMovePlacement,
+  onResizePlacement,
 }: WallStageProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({
@@ -85,6 +87,7 @@ export default function WallStage({
         onSelectPlacement={onSelectPlacement}
         onClearSelection={onClearSelection}
         onMovePlacement={onMovePlacement}
+        onResizePlacement={onResizePlacement}
       />
     </div>
   )

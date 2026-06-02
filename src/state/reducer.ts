@@ -40,6 +40,7 @@ export type Action =
       yCm: number
     }
   | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
+  | { type: 'resizePlacement'; id: string; longEdgeCm: number }
   | { type: 'selectPlacement'; id: string }
   | { type: 'clearSelection' }
   | { type: 'hydrate'; state: AppState }
@@ -108,6 +109,13 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         placements: state.placements.map((p) =>
           p.id === action.id ? { ...p, xCm: action.xCm, yCm: action.yCm } : p,
+        ),
+      }
+    case 'resizePlacement':
+      return {
+        ...state,
+        placements: state.placements.map((p) =>
+          p.id === action.id ? { ...p, longEdgeCm: action.longEdgeCm } : p,
         ),
       }
     case 'selectPlacement':

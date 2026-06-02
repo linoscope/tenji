@@ -461,6 +461,286 @@ describe('App', () => {
     })
   })
 
+  it('shows corner resize handles only on the selected placement', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    const wall = screen.getByTestId('wall') as HTMLElement
+    wall.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }) as DOMRect
+
+    const dataTransfer = {
+      types: ['application/x-tenji-photo'],
+      getData: () => 'id-1',
+      files: { length: 0 } as unknown as FileList,
+    }
+    fireEvent.dragOver(wall, { dataTransfer })
+    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
+
+    const placement = await screen.findByTestId('placement-id-2')
+    expect(placement).toHaveAttribute('data-selected', 'true')
+    // 4 corners while selected.
+    expect(
+      placement.querySelectorAll('[data-resize-handle]'),
+    ).toHaveLength(4)
+
+    // Deselect → no handles.
+    fireEvent.mouseDown(wall, { clientX: 5, clientY: 5 })
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('placement-id-2').querySelectorAll(
+          '[data-resize-handle]',
+        ),
+      ).toHaveLength(0),
+    )
+  })
+
+  it('resizes a placement when a corner handle is dragged outward', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    const wall = screen.getByTestId('wall') as HTMLElement
+    wall.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }) as DOMRect
+
+    const dataTransfer = {
+      types: ['application/x-tenji-photo'],
+      getData: () => 'id-1',
+      files: { length: 0 } as unknown as FileList,
+    }
+    fireEvent.dragOver(wall, { dataTransfer })
+    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
+
+    const placement = await screen.findByTestId('placement-id-2')
+    const initialLongEdge = Number(placement.getAttribute('data-long-edge-cm'))
+
+    const handle = placement.querySelector(
+      '[data-resize-handle="se"]',
+    ) as HTMLElement
+    expect(handle).toBeTruthy()
+
+    // Drag the SE corner outward (away from the photo's center at 100,60).
+    fireEvent.mouseDown(handle, { clientX: 120, clientY: 80 })
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 160 })
+    fireEvent.mouseUp(window, { clientX: 200, clientY: 160 })
+
+    await waitFor(() => {
+      const after = screen.getByTestId('placement-id-2')
+      expect(Number(after.getAttribute('data-long-edge-cm'))).toBeGreaterThan(
+        initialLongEdge,
+      )
+    })
+  })
+
+  it('shows an inspector with size label and W×H cm for the selected placement', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    const wall = screen.getByTestId('wall') as HTMLElement
+    wall.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }) as DOMRect
+
+    const dataTransfer = {
+      types: ['application/x-tenji-photo'],
+      getData: () => 'id-1',
+      files: { length: 0 } as unknown as FileList,
+    }
+    fireEvent.dragOver(wall, { dataTransfer })
+    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
+
+    await screen.findByTestId('placement-id-2')
+
+    // Default size is A3 (42 cm long edge); aspectRatio = 3000/2000 = 1.5
+    // → width 42, height 28.
+    const inspector = await screen.findByTestId('placement-inspector')
+    expect(inspector).toHaveTextContent('A3')
+    expect(inspector).toHaveTextContent(/42\s*×\s*28\s*cm/)
+  })
+
+  it('changes a placement size when an A-series preset is picked in the inspector', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    const wall = screen.getByTestId('wall') as HTMLElement
+    wall.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }) as DOMRect
+
+    const dataTransfer = {
+      types: ['application/x-tenji-photo'],
+      getData: () => 'id-1',
+      files: { length: 0 } as unknown as FileList,
+    }
+    fireEvent.dragOver(wall, { dataTransfer })
+    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
+
+    await screen.findByTestId('placement-id-2')
+
+    // Pick A2 (long edge 59.4 cm).
+    await user.click(screen.getByRole('button', { name: 'A2' }))
+
+    await waitFor(() => {
+      const placement = screen.getByTestId('placement-id-2')
+      expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(
+        59.4,
+      )
+    })
+    expect(screen.getByTestId('placement-inspector')).toHaveTextContent('A2')
+  })
+
+  it('changes a placement size via the custom long-edge input in the inspector', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    const wall = screen.getByTestId('wall') as HTMLElement
+    wall.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }) as DOMRect
+
+    const dataTransfer = {
+      types: ['application/x-tenji-photo'],
+      getData: () => 'id-1',
+      files: { length: 0 } as unknown as FileList,
+    }
+    fireEvent.dragOver(wall, { dataTransfer })
+    fireDropAt(wall, { dataTransfer, clientX: 100, clientY: 60 })
+
+    await screen.findByTestId('placement-id-2')
+
+    const input = screen.getByLabelText(/long edge/i)
+    fireEvent.change(input, { target: { value: '50' } })
+
+    await waitFor(() => {
+      const placement = screen.getByTestId('placement-id-2')
+      expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(50)
+    })
+    // 50 cm long edge, aspect 1.5 → 50 × 33.33 cm; not a preset → "Custom".
+    expect(screen.getByTestId('placement-inspector')).toHaveTextContent('Custom')
+  })
+
   it('deletes the active wall and shows the next one', async () => {
     const user = userEvent.setup()
     let n = 0
