@@ -467,6 +467,7 @@ export default function App({
             dispatch({ type: 'toggleSelectPlacement', id })
           }
           onClearSelection={() => dispatch({ type: 'clearSelection' })}
+          onSetSelection={(ids) => dispatch({ type: 'setSelection', ids })}
           onMovePlacement={(id, xCm, yCm) =>
             dispatch({ type: 'movePlacement', id, xCm, yCm })
           }

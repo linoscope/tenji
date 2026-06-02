@@ -49,6 +49,7 @@ export type Action =
   | { type: 'resizePlacement'; id: string; longEdgeCm: number }
   | { type: 'selectPlacement'; id: string }
   | { type: 'toggleSelectPlacement'; id: string }
+  | { type: 'setSelection'; ids: string[] }
   | { type: 'clearSelection' }
   | { type: 'sendPlacementToTray'; id: string }
   | { type: 'sendSelectionToTray' }
@@ -207,6 +208,11 @@ export function appReducer(state: AppState, action: Action): AppState {
         : dedupe([...current, action.id])
       return { ...state, ui: { ...state.ui, selectedPlacementIds: next } }
     }
+    case 'setSelection':
+      return {
+        ...state,
+        ui: { ...state.ui, selectedPlacementIds: dedupe(action.ids) },
+      }
     case 'clearSelection':
       return { ...state, ui: { ...state.ui, selectedPlacementIds: [] } }
     case 'sendPlacementToTray': {

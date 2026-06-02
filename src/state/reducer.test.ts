@@ -744,6 +744,22 @@ describe('multi-select', () => {
     expect(after.ui.selectedPlacementIds).toEqual([])
   })
 
+  it('setSelection replaces the selection with the given ids, deduped', () => {
+    const after = appReducer(seeded(['pl-1']), {
+      type: 'setSelection',
+      ids: ['pl-2', 'pl-3', 'pl-2'],
+    })
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-2', 'pl-3'])
+  })
+
+  it('setSelection with an empty list clears the selection', () => {
+    const after = appReducer(seeded(['pl-1', 'pl-2']), {
+      type: 'setSelection',
+      ids: [],
+    })
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
   it('hydrate of a legacy snapshot with selectedPlacementId lifts it to a single-id set', () => {
     const legacy = {
       ...initialState,
