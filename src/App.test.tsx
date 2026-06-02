@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { createMemoryStatePort } from './storage/port'
+import { createMemoryBlobStore } from './storage/blobStore'
 import { appReducer, initialState } from './state/reducer'
 
 function seededPort() {
@@ -14,6 +15,21 @@ function seededPort() {
     heightCm: 300,
   })
   return createMemoryStatePort(saved)
+}
+
+/** jsdom lacks createObjectURL; stub it so tray thumbnails render. */
+beforeAll(() => {
+  if (!URL.createObjectURL) {
+    URL.createObjectURL = () => 'blob:fake-url'
+  }
+  if (!URL.revokeObjectURL) {
+    URL.revokeObjectURL = () => {}
+  }
+})
+
+const fakeImageOps = {
+  decodeImage: async () => ({ width: 3000, height: 2000 }),
+  downscale: async (file: Blob) => ({ blob: file, width: 1500, height: 1000 }),
 }
 
 describe('App', () => {
@@ -92,6 +108,170 @@ describe('App', () => {
       expect(wall).toHaveAttribute('data-width-cm', '600')
       expect(wall).toHaveAttribute('data-height-cm', '180')
     })
+  })
+
+  it('imports a photo via the file picker and shows it in the tray', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `photo-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+
+    const file = new File(['data'], 'cat.jpg', { type: 'image/jpeg' })
+    const input = screen.getByLabelText(/import photos/i) as HTMLInputElement
+    await user.upload(input, file)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument(),
+    )
+    expect(screen.getByAltText('cat.jpg')).toBeInTheDocument()
+  })
+
+  it('stores the imported blob in the blob store under the photo id', async () => {
+    const user = userEvent.setup()
+    const blobStore = createMemoryBlobStore()
+    render(
+      <App
+        port={seededPort()}
+        blobStore={blobStore}
+        createId={() => 'photo-1'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+
+    const file = new File(['data'], 'cat.jpg', { type: 'image/jpeg' })
+    const input = screen.getByLabelText(/import photos/i) as HTMLInputElement
+    await user.upload(input, file)
+
+    await waitFor(async () =>
+      expect(await blobStore.load('photo-1')).not.toBeNull(),
+    )
+  })
+
+  it('persists imported photos across reloads', async () => {
+    const user = userEvent.setup()
+    const port = seededPort()
+    const blobStore = createMemoryBlobStore()
+    const { unmount } = render(
+      <App
+        port={port}
+        blobStore={blobStore}
+        createId={() => 'photo-1'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-photo-photo-1')).toBeInTheDocument(),
+    )
+
+    unmount()
+
+    render(
+      <App
+        port={port}
+        blobStore={blobStore}
+        createId={() => 'unused'}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    expect(await screen.findByTestId('tray-photo-photo-1')).toBeInTheDocument()
+    expect(screen.getByAltText('cat.jpg')).toBeInTheDocument()
+  })
+
+  it('imports photos when files are dropped onto the app', async () => {
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'photo-drop'}
+        imageOps={fakeImageOps}
+      />,
+    )
+    await screen.findByText('North Wall')
+
+    const file = new File(['data'], 'dropped.jpg', { type: 'image/jpeg' })
+    fireEvent.drop(screen.getByTestId('app-root'), {
+      dataTransfer: { files: [file], types: ['Files'] },
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-photo-photo-drop')).toBeInTheDocument(),
+    )
+    expect(screen.getByAltText('dropped.jpg')).toBeInTheDocument()
+  })
+
+  it('imports photos pasted from the clipboard', async () => {
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'photo-paste'}
+        imageOps={fakeImageOps}
+      />,
+    )
+    await screen.findByText('North Wall')
+
+    const file = new File(['data'], 'pasted.png', { type: 'image/png' })
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => file,
+          },
+        ],
+      },
+    })
+    window.dispatchEvent(event)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-photo-photo-paste')).toBeInTheDocument(),
+    )
+    expect(screen.getByAltText('pasted.png')).toBeInTheDocument()
+  })
+
+  it('shares the tray across walls (photo visible after switching walls)', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `id-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByText('North Wall')
+    await user.upload(
+      screen.getByLabelText(/import photos/i) as HTMLInputElement,
+      new File(['data'], 'cat.jpg', { type: 'image/jpeg' }),
+    )
+    await screen.findByTestId('tray-photo-id-1')
+
+    // Add a second wall and switch to it.
+    await user.click(screen.getByRole('button', { name: /add wall/i }))
+    // After clicking "Add wall", the new wall is now active.
+    expect(screen.getByTestId('tray-photo-id-1')).toBeInTheDocument()
   })
 
   it('deletes the active wall and shows the next one', async () => {
