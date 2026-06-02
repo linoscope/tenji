@@ -1730,6 +1730,382 @@ describe('App', () => {
     expect(screen.getByTestId('tray-photo-photo-2')).toBeInTheDocument()
   })
 
+  describe('project export/import', () => {
+    it('Export project downloads a tenji-plan JSON envelope with the full state and base64 images', async () => {
+      const user = userEvent.setup()
+      const blobStore = createMemoryBlobStore()
+      const seeded = {
+        photos: [{ id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 }],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [
+          { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        ],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      await blobStore.save('b1', new Blob(['raw-bytes'], { type: 'image/jpeg' }))
+      const downloads: Array<{ blob: Blob; filename: string }> = []
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={blobStore}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          downloadBlob={(blob, filename) => downloads.push({ blob, filename })}
+          projectIo={{
+            blobToBase64: async () => 'data:image/jpeg;base64,RkFLRQ==',
+            base64ToBlob: async () => new Blob(),
+            now: () => new Date('2026-06-03T10:00:00Z'),
+          }}
+        />,
+      )
+
+      await screen.findByRole('button', { name: /north wall/i })
+      await user.click(screen.getByRole('button', { name: /export project/i }))
+
+      await waitFor(() => expect(downloads).toHaveLength(1))
+      const { blob, filename } = downloads[0]
+      expect(filename).toBe('tenji-plan-2026-06-03.json')
+      expect(blob.type).toMatch(/json/)
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onerror = () => reject(reader.error)
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsText(blob)
+      })
+      const parsed = JSON.parse(text)
+      expect(parsed.format).toBe('tenji-project')
+      expect(parsed.version).toBe(1)
+      expect(parsed.state.walls).toHaveLength(1)
+      expect(parsed.state.placements).toHaveLength(1)
+      expect(parsed.images.b1).toBe('data:image/jpeg;base64,RkFLRQ==')
+    })
+
+    it('Importing a valid file into an empty workspace replaces state + restores blobs without a confirm', async () => {
+      const user = userEvent.setup()
+      const blobStore = createMemoryBlobStore()
+      const importedBlob = new Blob(['restored'], { type: 'image/png' })
+      let confirmCalls = 0
+      const emptyState = {
+        photos: [],
+        walls: [],
+        placements: [],
+        ui: {
+          activeWallId: null,
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      const envelopeJson = JSON.stringify({
+        format: 'tenji-project',
+        version: 1,
+        exportedAt: '2026-06-03T10:00:00.000Z',
+        state: {
+          photos: [
+            { id: 'imp-photo', filename: 'imported.jpg', blobKey: 'imp-blob', aspectRatio: 1 },
+          ],
+          walls: [{ id: 'imp-wall', name: 'Imported Wall', widthCm: 600, heightCm: 400 }],
+          placements: [
+            {
+              id: 'imp-pl',
+              photoId: 'imp-photo',
+              wallId: 'imp-wall',
+              xCm: 200,
+              yCm: 150,
+              longEdgeCm: 42,
+            },
+          ],
+          ui: {
+            activeWallId: 'imp-wall',
+            selectedPlacementIds: [],
+            rulerEnabled: true,
+            silhouetteEnabled: true,
+          },
+        },
+        images: { 'imp-blob': 'data:image/png;base64,RkFLRQ==' },
+      })
+      render(
+        <App
+          port={createMemoryStatePort(emptyState)}
+          blobStore={blobStore}
+          createId={() => 'autocreated'}
+          imageOps={fakeImageOps}
+          confirmReplace={() => {
+            confirmCalls++
+            return true
+          }}
+          projectIo={{
+            blobToBase64: async () => 'data:image/png;base64,RkFLRQ==',
+            base64ToBlob: async () => importedBlob,
+            now: () => new Date('2026-06-03T10:00:00Z'),
+          }}
+        />,
+      )
+
+      // App auto-creates "Wall 1" on first load (empty seed). Delete it so the
+      // current in-memory workspace is truly empty before importing.
+      await screen.findByText('Wall 1')
+      await user.click(screen.getByRole('button', { name: /delete wall/i }))
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /delete wall/i })).not.toBeInTheDocument(),
+      )
+
+      const file = new File([envelopeJson], 'plan.json', { type: 'application/json' })
+      const input = screen.getByLabelText(/import project/i) as HTMLInputElement
+      await user.upload(input, file)
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /imported wall/i })).toBeInTheDocument(),
+      )
+      expect(confirmCalls).toBe(0)
+      expect(screen.getByTestId('placement-imp-pl')).toBeInTheDocument()
+      expect(await blobStore.load('imp-blob')).toBe(importedBlob)
+    })
+
+    it('Importing into a non-empty workspace prompts confirm; Cancel leaves state unchanged', async () => {
+      const user = userEvent.setup()
+      const blobStore = createMemoryBlobStore()
+      const seeded = {
+        photos: [],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      const envelopeJson = JSON.stringify({
+        format: 'tenji-project',
+        version: 1,
+        exportedAt: '2026-06-03T10:00:00.000Z',
+        state: {
+          photos: [],
+          walls: [{ id: 'imp-wall', name: 'Imported Wall', widthCm: 600, heightCm: 400 }],
+          placements: [],
+          ui: {
+            activeWallId: 'imp-wall',
+            selectedPlacementIds: [],
+            rulerEnabled: true,
+            silhouetteEnabled: true,
+          },
+        },
+        images: {},
+      })
+      let confirmCalls = 0
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={blobStore}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          confirmReplace={() => {
+            confirmCalls++
+            return false
+          }}
+          projectIo={{
+            blobToBase64: async () => '',
+            base64ToBlob: async () => new Blob(),
+            now: () => new Date(),
+          }}
+        />,
+      )
+
+      await screen.findByText('North Wall')
+
+      const file = new File([envelopeJson], 'plan.json', { type: 'application/json' })
+      const input = screen.getByLabelText(/import project/i) as HTMLInputElement
+      await user.upload(input, file)
+
+      // Confirm was asked; user cancelled; original wall still there, imported wall not.
+      await waitFor(() => expect(confirmCalls).toBe(1))
+      expect(screen.queryByRole('button', { name: /imported wall/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /north wall/i })).toBeInTheDocument()
+    })
+
+    it('Importing into a non-empty workspace + OK replaces state wholesale (ids preserved)', async () => {
+      const user = userEvent.setup()
+      const blobStore = createMemoryBlobStore()
+      const seeded = {
+        photos: [{ id: 'old-photo', filename: 'old.jpg', blobKey: 'old-blob', aspectRatio: 1 }],
+        walls: [{ id: 'old-wall', name: 'Old Wall', widthCm: 500, heightCm: 300 }],
+        placements: [
+          {
+            id: 'old-pl',
+            photoId: 'old-photo',
+            wallId: 'old-wall',
+            xCm: 100,
+            yCm: 100,
+            longEdgeCm: 42,
+          },
+        ],
+        ui: {
+          activeWallId: 'old-wall',
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      await blobStore.save('old-blob', new Blob(['old']))
+      const importedBlob = new Blob(['new-bytes'], { type: 'image/png' })
+      const envelopeJson = JSON.stringify({
+        format: 'tenji-project',
+        version: 1,
+        exportedAt: '2026-06-03T10:00:00.000Z',
+        state: {
+          photos: [{ id: 'imp-photo', filename: 'imp.jpg', blobKey: 'imp-blob', aspectRatio: 1 }],
+          walls: [{ id: 'imp-wall', name: 'Imported Wall', widthCm: 600, heightCm: 400 }],
+          placements: [
+            {
+              id: 'imp-pl',
+              photoId: 'imp-photo',
+              wallId: 'imp-wall',
+              xCm: 200,
+              yCm: 150,
+              longEdgeCm: 42,
+            },
+          ],
+          ui: {
+            activeWallId: 'imp-wall',
+            selectedPlacementIds: [],
+            rulerEnabled: true,
+            silhouetteEnabled: true,
+          },
+        },
+        images: { 'imp-blob': 'data:image/png;base64,RkFLRQ==' },
+      })
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={blobStore}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          confirmReplace={() => true}
+          projectIo={{
+            blobToBase64: async () => '',
+            base64ToBlob: async () => importedBlob,
+            now: () => new Date(),
+          }}
+        />,
+      )
+
+      await screen.findByRole('button', { name: /old wall/i })
+
+      const file = new File([envelopeJson], 'plan.json', { type: 'application/json' })
+      const input = screen.getByLabelText(/import project/i) as HTMLInputElement
+      await user.upload(input, file)
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /imported wall/i })).toBeInTheDocument(),
+      )
+      expect(screen.queryByRole('button', { name: /old wall/i })).not.toBeInTheDocument()
+      // ids preserved: the placement renders under the *imported* id.
+      expect(screen.getByTestId('placement-imp-pl')).toBeInTheDocument()
+      // blobs restored under their original keys
+      expect(await blobStore.load('imp-blob')).toBe(importedBlob)
+    })
+
+    it('Importing an invalid/corrupt file shows an error and leaves state untouched', async () => {
+      const user = userEvent.setup()
+      const seeded = {
+        photos: [],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      let confirmCalls = 0
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          confirmReplace={() => {
+            confirmCalls++
+            return true
+          }}
+          projectIo={{
+            blobToBase64: async () => '',
+            base64ToBlob: async () => new Blob(),
+            now: () => new Date(),
+          }}
+        />,
+      )
+
+      await screen.findByText('North Wall')
+
+      const file = new File(['not json {{{'], 'garbage.json', { type: 'application/json' })
+      const input = screen.getByLabelText(/import project/i) as HTMLInputElement
+      await user.upload(input, file)
+
+      // An error message appears.
+      await screen.findByTestId('project-import-error')
+      // Original wall is still there; confirm was never asked.
+      expect(screen.getByRole('button', { name: /north wall/i })).toBeInTheDocument()
+      expect(confirmCalls).toBe(0)
+    })
+
+    it('Importing a wrong-version envelope errors without confirming and without changing state', async () => {
+      const user = userEvent.setup()
+      const seeded = {
+        photos: [],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: [],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      const envelopeJson = JSON.stringify({
+        format: 'tenji-project',
+        version: 999,
+        exportedAt: 'x',
+        state: seeded,
+        images: {},
+      })
+      let confirmCalls = 0
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+          confirmReplace={() => {
+            confirmCalls++
+            return true
+          }}
+          projectIo={{
+            blobToBase64: async () => '',
+            base64ToBlob: async () => new Blob(),
+            now: () => new Date(),
+          }}
+        />,
+      )
+
+      await screen.findByText('North Wall')
+      const file = new File([envelopeJson], 'plan.json', { type: 'application/json' })
+      const input = screen.getByLabelText(/import project/i) as HTMLInputElement
+      await user.upload(input, file)
+
+      await screen.findByTestId('project-import-error')
+      expect(confirmCalls).toBe(0)
+      expect(screen.getByRole('button', { name: /north wall/i })).toBeInTheDocument()
+    })
+  })
+
   it('switching the active wall clears the selection', async () => {
     const user = userEvent.setup()
     const seeded = {
