@@ -18,6 +18,10 @@ export type Action =
       widthCm?: number
       heightCm?: number
     }
+  | { type: 'selectWall'; id: string }
+  | { type: 'renameWall'; id: string; name: string }
+  | { type: 'resizeWall'; id: string; widthCm: number; heightCm: number }
+  | { type: 'deleteWall'; id: string }
   | { type: 'hydrate'; state: AppState }
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -35,6 +39,38 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         walls: [...state.walls, wall],
         ui: { ...state.ui, activeWallId: wall.id },
+      }
+    }
+    case 'selectWall':
+      return { ...state, ui: { ...state.ui, activeWallId: action.id } }
+    case 'renameWall':
+      return {
+        ...state,
+        walls: state.walls.map((w) =>
+          w.id === action.id ? { ...w, name: action.name } : w,
+        ),
+      }
+    case 'resizeWall':
+      return {
+        ...state,
+        walls: state.walls.map((w) =>
+          w.id === action.id
+            ? { ...w, widthCm: action.widthCm, heightCm: action.heightCm }
+            : w,
+        ),
+      }
+    case 'deleteWall': {
+      const walls = state.walls.filter((w) => w.id !== action.id)
+      const placements = state.placements.filter((p) => p.wallId !== action.id)
+      const activeWallId =
+        state.ui.activeWallId === action.id
+          ? (walls[0]?.id ?? null)
+          : state.ui.activeWallId
+      return {
+        ...state,
+        walls,
+        placements,
+        ui: { ...state.ui, activeWallId },
       }
     }
     default:
