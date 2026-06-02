@@ -14,6 +14,7 @@ type WallViewProps = {
   onSelectPlacement: (id: string) => void
   onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
+  onResizePlacement: (id: string, longEdgeCm: number) => void
 }
 
 const PHOTO_MIME = 'application/x-tenji-photo'
@@ -30,6 +31,7 @@ export default function WallView({
   onSelectPlacement,
   onClearSelection,
   onMovePlacement,
+  onResizePlacement,
 }: WallViewProps) {
   const onDragOver = (e: React.DragEvent) => {
     if (Array.from(e.dataTransfer.types).includes(PHOTO_MIME)) {
@@ -82,6 +84,7 @@ export default function WallView({
             selected={p.id === selectedPlacementId}
             onSelect={() => onSelectPlacement(p.id)}
             onMove={(xCm, yCm) => onMovePlacement(p.id, xCm, yCm)}
+            onResize={(longEdgeCm) => onResizePlacement(p.id, longEdgeCm)}
           />
         )
       })}

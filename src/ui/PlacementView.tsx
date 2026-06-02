@@ -12,7 +12,13 @@ type PlacementViewProps = {
   selected: boolean
   onSelect: () => void
   onMove: (xCm: number, yCm: number) => void
+  onResize: (longEdgeCm: number) => void
 }
+
+type Corner = 'nw' | 'ne' | 'sw' | 'se'
+const CORNERS: Corner[] = ['nw', 'ne', 'sw', 'se']
+const MIN_LONG_EDGE_CM = 1
+const HANDLE_SIZE_PX = 10
 
 export default function PlacementView({
   placement,
@@ -22,12 +28,22 @@ export default function PlacementView({
   selected,
   onSelect,
   onMove,
+  onResize,
 }: PlacementViewProps) {
-  const size = computeSizeFromLongEdge(placement.longEdgeCm, photo.aspectRatio)
+  // While resizing, render the in-progress long edge so the photo + handles
+  // track the cursor live; commit to state on mouse up.
+  const [liveLongEdgeCm, setLiveLongEdgeCm] = useState<number | null>(null)
+  const liveLongEdgeRef = useRef<number | null>(null)
+  useEffect(() => {
+    liveLongEdgeRef.current = liveLongEdgeCm
+  }, [liveLongEdgeCm])
+
+  const effectiveLongEdgeCm = liveLongEdgeCm ?? placement.longEdgeCm
+  const size = computeSizeFromLongEdge(effectiveLongEdgeCm, photo.aspectRatio)
   const widthPx = cmToPx(size.widthCm, scale)
   const heightPx = cmToPx(size.heightCm, scale)
 
-  // Drag state (in px relative to the wall is what we track via cm).
+  // Move-drag.
   const [dragOffsetPx, setDragOffsetPx] = useState<{ x: number; y: number } | null>(
     null,
   )
@@ -67,7 +83,67 @@ export default function PlacementView({
     }
   }, [dragOffsetPx, scale, onMove])
 
-  const onMouseDown = (e: React.MouseEvent) => {
+  // Resize-drag.
+  const resizeRef = useRef<{
+    centerClientX: number
+    centerClientY: number
+    startDistPx: number
+    startLongEdgeCm: number
+  } | null>(null)
+  const [resizing, setResizing] = useState(false)
+
+  useEffect(() => {
+    if (!resizing) return
+    const onMove_ = (e: MouseEvent) => {
+      const r = resizeRef.current
+      if (!r) return
+      const distNow = Math.hypot(
+        e.clientX - r.centerClientX,
+        e.clientY - r.centerClientY,
+      )
+      const ratio = distNow / r.startDistPx
+      const next = Math.max(MIN_LONG_EDGE_CM, r.startLongEdgeCm * ratio)
+      setLiveLongEdgeCm(next)
+    }
+    const onUp = () => {
+      const live = liveLongEdgeRef.current
+      const start = resizeRef.current?.startLongEdgeCm
+      resizeRef.current = null
+      setResizing(false)
+      setLiveLongEdgeCm(null)
+      if (live !== null && start !== undefined && live !== start) {
+        onResize(live)
+      }
+    }
+    window.addEventListener('mousemove', onMove_)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove_)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [resizing, onResize])
+
+  const beginResize = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const placementEl = (e.currentTarget as HTMLElement).parentElement
+    if (!placementEl) return
+    const rect = placementEl.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    const startDistPx = Math.hypot(e.clientX - centerX, e.clientY - centerY)
+    if (startDistPx === 0) return
+    resizeRef.current = {
+      centerClientX: centerX,
+      centerClientY: centerY,
+      startDistPx,
+      startLongEdgeCm: placement.longEdgeCm,
+    }
+    setLiveLongEdgeCm(placement.longEdgeCm)
+    setResizing(true)
+  }
+
+  const onMouseDownBody = (e: React.MouseEvent) => {
     e.stopPropagation()
     onSelect()
     dragStateRef.current = {
@@ -79,7 +155,6 @@ export default function PlacementView({
     setDragOffsetPx({ x: 0, y: 0 })
   }
 
-  // Convert center-in-cm → top-left-in-px within the wall.
   const centerXPx = cmToPx(placement.xCm, scale) + (dragOffsetPx?.x ?? 0)
   const centerYPx = cmToPx(placement.yCm, scale) + (dragOffsetPx?.y ?? 0)
   const leftPx = centerXPx - widthPx / 2
@@ -94,7 +169,7 @@ export default function PlacementView({
       data-y-cm={placement.yCm}
       data-orientation={size.orientation}
       data-selected={selected ? 'true' : 'false'}
-      onMouseDown={onMouseDown}
+      onMouseDown={onMouseDownBody}
       style={{
         position: 'absolute',
         left: leftPx,
@@ -109,8 +184,41 @@ export default function PlacementView({
       }}
     >
       <Thumbnail photo={photo} blobStore={blobStore} />
+      {selected
+        ? CORNERS.map((corner) => (
+            <span
+              key={corner}
+              data-resize-handle={corner}
+              onMouseDown={beginResize}
+              style={cornerStyle(corner)}
+            />
+          ))
+        : null}
     </div>
   )
+}
+
+function cornerStyle(corner: Corner): React.CSSProperties {
+  const base: React.CSSProperties = {
+    position: 'absolute',
+    width: HANDLE_SIZE_PX,
+    height: HANDLE_SIZE_PX,
+    background: '#fff',
+    border: '1.5px solid #2a6df4',
+    boxSizing: 'border-box',
+    borderRadius: 2,
+  }
+  const offset = -HANDLE_SIZE_PX / 2
+  switch (corner) {
+    case 'nw':
+      return { ...base, left: offset, top: offset, cursor: 'nwse-resize' }
+    case 'ne':
+      return { ...base, right: offset, top: offset, cursor: 'nesw-resize' }
+    case 'sw':
+      return { ...base, left: offset, bottom: offset, cursor: 'nesw-resize' }
+    case 'se':
+      return { ...base, right: offset, bottom: offset, cursor: 'nwse-resize' }
+  }
 }
 
 function Thumbnail({ photo, blobStore }: { photo: Photo; blobStore: BlobStore }) {

@@ -12,6 +12,7 @@ import {
 } from './photo/browserImageOps'
 import WallStage from './ui/WallStage'
 import PhotoTray from './ui/PhotoTray'
+import PlacementInspector from './ui/PlacementInspector'
 
 type AppProps = {
   port?: StatePort
@@ -63,6 +64,12 @@ export default function App({
 
   const activeWall =
     state.walls.find((w) => w.id === state.ui.activeWallId) ?? state.walls[0]
+  const selectedPlacement = state.placements.find(
+    (p) => p.id === state.ui.selectedPlacementId,
+  )
+  const selectedPhoto = selectedPlacement
+    ? state.photos.find((p) => p.id === selectedPlacement.photoId)
+    : undefined
 
   const importFiles = async (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
@@ -182,6 +189,20 @@ export default function App({
             onDelete={() => dispatch({ type: 'deleteWall', id: activeWall.id })}
           />
         ) : null}
+        {selectedPlacement && selectedPhoto ? (
+          <PlacementInspector
+            key={selectedPlacement.id}
+            placement={selectedPlacement}
+            photo={selectedPhoto}
+            onResize={(longEdgeCm) =>
+              dispatch({
+                type: 'resizePlacement',
+                id: selectedPlacement.id,
+                longEdgeCm,
+              })
+            }
+          />
+        ) : null}
         <PhotoTray
           photos={state.photos}
           blobStore={blobStoreRef.current}
@@ -211,6 +232,9 @@ export default function App({
           onClearSelection={() => dispatch({ type: 'clearSelection' })}
           onMovePlacement={(id, xCm, yCm) =>
             dispatch({ type: 'movePlacement', id, xCm, yCm })
+          }
+          onResizePlacement={(id, longEdgeCm) =>
+            dispatch({ type: 'resizePlacement', id, longEdgeCm })
           }
         />
       ) : null}

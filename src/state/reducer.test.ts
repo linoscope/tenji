@@ -290,6 +290,94 @@ describe('movePlacement', () => {
   })
 })
 
+describe('resizePlacement', () => {
+  it('updates longEdgeCm of the matching placement', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'resizePlacement',
+      id: 'pl-1',
+      longEdgeCm: 59.4,
+    })
+
+    expect(after.placements[0]).toMatchObject({ longEdgeCm: 59.4 })
+  })
+
+  it('leaves other placements unchanged', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+        {
+          id: 'pl-2',
+          photoId: 'photo-2',
+          wallId: 'w1',
+          xCm: 200,
+          yCm: 90,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'resizePlacement',
+      id: 'pl-1',
+      longEdgeCm: 21,
+    })
+
+    expect(after.placements[1]).toMatchObject({ longEdgeCm: 42 })
+  })
+
+  it('does not change xCm/yCm', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementId: null },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'resizePlacement',
+      id: 'pl-1',
+      longEdgeCm: 84.1,
+    })
+
+    expect(after.placements[0]).toMatchObject({ xCm: 100, yCm: 80 })
+  })
+})
+
 describe('selectPlacement', () => {
   it('sets the selected placement id', () => {
     const seeded: ReturnType<typeof appReducer> = {
