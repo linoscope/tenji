@@ -18,7 +18,18 @@ import WallStage from './ui/WallStage'
 import PhotoTray from './ui/PhotoTray'
 import PlacementInspector from './ui/PlacementInspector'
 import PrintShop from './ui/PrintShop'
+import ProjectShare from './ui/ProjectShare'
 import { computeTrayItems } from './tray/trayView'
+import {
+  buildProjectEnvelope,
+  parseProjectEnvelope,
+} from './projectShare/envelope'
+import type { Base64ToBlob, BlobToBase64 } from './projectShare/io'
+import {
+  browserBase64ToBlob,
+  browserBlobToBase64,
+} from './projectShare/io'
+import { projectExportFilename } from './projectShare/filename'
 
 type AppProps = {
   port?: StatePort
@@ -27,6 +38,27 @@ type AppProps = {
   imageOps?: { decodeImage: DecodeImage; downscale: Downscale }
   exportPort?: ExportPort
   downloadBlob?: (blob: Blob, filename: string) => void
+  projectIo?: {
+    blobToBase64: BlobToBase64
+    base64ToBlob: Base64ToBlob
+    now: () => Date
+  }
+  confirmReplace?: (message: string) => boolean
+}
+
+const REPLACE_PROMPT = 'Importing replaces your current plan. Continue?'
+
+function readFileAsText(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'))
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') resolve(result)
+      else reject(new Error('expected string'))
+    }
+    reader.readAsText(file)
+  })
 }
 
 const defaultCreateId = () =>
@@ -41,6 +73,11 @@ export default function App({
   imageOps,
   exportPort,
   downloadBlob = triggerBlobDownload,
+  projectIo,
+  confirmReplace = (msg) =>
+    typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(msg)
+      : true,
 }: AppProps) {
   const portRef = useRef<StatePort>(port ?? createIdbStatePort())
   const blobStoreRef = useRef<BlobStore>(blobStore ?? createIdbBlobStore())
@@ -50,9 +87,14 @@ export default function App({
   const wallRef = useRef<HTMLElement | null>(null)
   const decodeImage = imageOps?.decodeImage ?? browserDecodeImage
   const downscale = imageOps?.downscale ?? browserDownscale
+  const blobToBase64 = projectIo?.blobToBase64 ?? browserBlobToBase64
+  const base64ToBlob = projectIo?.base64ToBlob ?? browserBase64ToBlob
+  const projectNowRef = useRef<() => Date>(projectIo?.now ?? (() => new Date()))
   const [state, dispatch] = useReducer(appReducer, initialState)
   const [hydrated, setHydrated] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [projectBusy, setProjectBusy] = useState(false)
+  const [projectError, setProjectError] = useState<string | null>(null)
 
   // Load saved state once; if there is nothing to restore, start with a wall.
   useEffect(() => {
@@ -146,6 +188,58 @@ export default function App({
     return () => window.removeEventListener('paste', onPaste)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const exportProject = useCallback(async () => {
+    setProjectError(null)
+    setProjectBusy(true)
+    try {
+      const envelope = await buildProjectEnvelope({
+        state,
+        loadBlob: (key) => blobStoreRef.current.load(key),
+        blobToBase64,
+        now: projectNowRef.current,
+      })
+      const json = JSON.stringify(envelope)
+      const blob = new Blob([json], { type: 'application/json' })
+      downloadBlob(blob, projectExportFilename(projectNowRef.current()))
+    } finally {
+      setProjectBusy(false)
+    }
+  }, [state, blobToBase64, downloadBlob])
+
+  const importProject = useCallback(
+    async (file: File) => {
+      setProjectError(null)
+      setProjectBusy(true)
+      try {
+        const text = await readFileAsText(file)
+        let raw: unknown
+        try {
+          raw = JSON.parse(text)
+        } catch {
+          setProjectError('Could not read project file (invalid JSON).')
+          return
+        }
+        const result = parseProjectEnvelope(raw)
+        if (!result.ok) {
+          setProjectError(`Could not read project file (${result.error}).`)
+          return
+        }
+        const isEmpty =
+          state.walls.length === 0 && state.photos.length === 0
+        if (!isEmpty && !confirmReplace(REPLACE_PROMPT)) return
+        // Restore image blobs first so the new state has data to display.
+        for (const [key, dataUrl] of Object.entries(result.envelope.images)) {
+          const blob = await base64ToBlob(dataUrl)
+          await blobStoreRef.current.save(key, blob)
+        }
+        dispatch({ type: 'hydrate', state: result.envelope.state })
+      } finally {
+        setProjectBusy(false)
+      }
+    },
+    [state.walls.length, state.photos.length, confirmReplace, base64ToBlob],
+  )
 
   const exportActiveWall = useCallback(async () => {
     if (!activeWall) return
@@ -306,6 +400,12 @@ export default function App({
           walls={state.walls}
           blobStore={blobStoreRef.current}
           downloadBlob={downloadBlob}
+        />
+        <ProjectShare
+          onExport={() => void exportProject()}
+          onPickImportFile={(file) => void importProject(file)}
+          error={projectError}
+          busy={projectBusy}
         />
       </aside>
       {activeWall ? (
