@@ -5,6 +5,7 @@ import App from './App'
 import { createMemoryStatePort } from './storage/port'
 import { createMemoryBlobStore } from './storage/blobStore'
 import { appReducer, initialState } from './state/reducer'
+import { createMemoryShareStore } from './projectShare/shareStore'
 
 function seededPort() {
   const saved = appReducer(initialState, {
@@ -2881,5 +2882,88 @@ describe('App', () => {
         expect(Number(p.getAttribute('data-height-cm'))).toBeCloseTo(28)
       })
     })
+  })
+})
+
+describe('Supabase share-by-link', () => {
+  const origin = { origin: 'https://tenji.app', pathname: '/' }
+
+  function sharedEnvelopeJson() {
+    const sharedState = appReducer(initialState, {
+      type: 'createWall',
+      id: 'shared-w',
+      name: 'Shared Wall',
+      widthCm: 400,
+      heightCm: 250,
+    })
+    return JSON.stringify({
+      format: 'tenji-project',
+      version: 1,
+      exportedAt: new Date(0).toISOString(),
+      state: sharedState,
+      images: {},
+    })
+  }
+
+  it('hides the Share UI when no share store is configured', async () => {
+    render(
+      <App port={seededPort()} blobStore={createMemoryBlobStore()} createId={() => 'x'} />,
+    )
+    await screen.findByTestId('wall')
+    expect(screen.queryByTestId('project-share-link')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /create shareable link/i }),
+    ).toBeNull()
+  })
+
+  it('creates a snapshot and shows a copyable #share URL', async () => {
+    const user = userEvent.setup()
+    const store = createMemoryShareStore()
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'x'}
+        shareStore={store}
+        shareUrlOrigin={origin}
+      />,
+    )
+    await screen.findByTestId('wall')
+    await user.click(screen.getByRole('button', { name: /create shareable link/i }))
+    const field = (await screen.findByTestId('project-share-url')) as HTMLInputElement
+    expect(field.value).toBe('https://tenji.app/#share=mem-1')
+  })
+
+  it('auto-loads a shared plan from a #share id into an empty workspace', async () => {
+    const store = createMemoryShareStore()
+    const { id } = await store.createSnapshot(sharedEnvelopeJson())
+    render(
+      <App
+        port={createMemoryStatePort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'x'}
+        shareStore={store}
+        getInitialShareId={() => id}
+      />,
+    )
+    expect(await screen.findByText('Shared Wall')).toBeInTheDocument()
+  })
+
+  it('guards replace when opening a share link into a non-empty workspace', async () => {
+    const store = createMemoryShareStore()
+    const { id } = await store.createSnapshot(sharedEnvelopeJson())
+    render(
+      <App
+        port={seededPort()}
+        blobStore={createMemoryBlobStore()}
+        createId={() => 'x'}
+        shareStore={store}
+        getInitialShareId={() => id}
+        confirmReplace={() => false}
+      />,
+    )
+    // Declined → the existing saved plan stays; the shared plan is not loaded.
+    expect(await screen.findByText('North Wall')).toBeInTheDocument()
+    expect(screen.queryByText('Shared Wall')).toBeNull()
   })
 })
