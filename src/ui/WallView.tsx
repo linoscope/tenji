@@ -26,7 +26,6 @@ type WallViewProps = {
   silhouetteEnabled: boolean
   onSelectPlacement: (id: string) => void
   onToggleSelectPlacement: (id: string) => void
-  onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
   onMoveSelection: (dxCm: number, dyCm: number) => void
   onResizePlacement: (id: string, size: PlacementSize) => void
@@ -71,7 +70,6 @@ export default function WallView({
   silhouetteEnabled,
   onSelectPlacement,
   onToggleSelectPlacement,
-  onClearSelection,
   onMovePlacement,
   onMoveSelection,
   onResizePlacement,
@@ -95,10 +93,6 @@ export default function WallView({
   } | null>(null)
   /** Records the most recent click's shift state so onMoveStart can branch. */
   const lastClickShiftRef = useRef(false)
-
-  const onWallMouseDown = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClearSelection()
-  }
 
   // Compute alignment for the active drag, if any.
   const draggedPlacement = liveDrag
@@ -181,7 +175,6 @@ export default function WallView({
       ref={(node) => {
         if (wallRef) wallRef.current = node
       }}
-      onMouseDown={onWallMouseDown}
       style={{
         position: 'relative',
         width: cmToPx(wall.widthCm, scale),

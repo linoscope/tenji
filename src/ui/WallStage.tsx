@@ -230,10 +230,13 @@ export default function WallStage({
   }, [drag !== null])
 
   const onStageMouseDown = (e: React.MouseEvent) => {
-    // Marquee only starts on a click of empty stage background, never on a
-    // child (a placement or the wall itself — wall clicks fall through to
-    // WallView's onClearSelection handler).
-    if (e.target !== e.currentTarget) return
+    // Marquee starts on a mousedown of "empty space" — either the stage
+    // background (the gray margin) or the bare wall surface. A mousedown
+    // on a placement targets the placement element (a descendant of the
+    // wall), so this check naturally excludes it and lets the placement's
+    // own drag handlers run.
+    if (e.target !== e.currentTarget && e.target !== internalWallRef.current)
+      return
     if (e.button !== 0) return
     const next: MarqueeDrag = {
       startClientX: e.clientX,
@@ -289,9 +292,11 @@ export default function WallStage({
       data-testid="stage"
       onMouseDown={onStageMouseDown}
       onContextMenu={(e) => {
-        // Empty-stage right-click: a child (placement) handles its own
-        // contextmenu and stops propagation; only the bare background reaches us.
-        if (e.target !== e.currentTarget) return
+        // Empty-stage right-click: a child placement handles its own
+        // contextmenu and stops propagation; only the bare stage background
+        // or the bare wall surface (i.e. "empty space") reaches us here.
+        if (e.target !== e.currentTarget && e.target !== internalWallRef.current)
+          return
         if (!onContextMenuEmpty) return
         e.preventDefault()
         onContextMenuEmpty(e.clientX, e.clientY)
@@ -319,7 +324,6 @@ export default function WallStage({
         silhouetteEnabled={silhouetteEnabled}
         onSelectPlacement={onSelectPlacement}
         onToggleSelectPlacement={onToggleSelectPlacement}
-        onClearSelection={onClearSelection}
         onMovePlacement={onMovePlacement}
         onMoveSelection={onMoveSelection}
         onResizePlacement={onResizePlacement}

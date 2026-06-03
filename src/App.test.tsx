@@ -402,8 +402,9 @@ describe('App', () => {
     const placement = await screen.findByTestId('placement-pl-1')
     const wall = screen.getByTestId('wall') as HTMLElement
 
-    // Click empty wall to deselect.
+    // Click empty wall to deselect (sub-threshold mousedown+up).
     fireEvent.mouseDown(wall, { clientX: 5, clientY: 5 })
+    fireEvent.mouseUp(window, { clientX: 5, clientY: 5 })
     await waitFor(() =>
       expect(screen.getByTestId('placement-pl-1')).toHaveAttribute(
         'data-selected',
@@ -465,9 +466,10 @@ describe('App', () => {
       placement.querySelectorAll('[data-resize-handle]'),
     ).toHaveLength(4)
 
-    // Deselect → no handles.
+    // Deselect → no handles. Sub-threshold click on empty wall.
     const wall = screen.getByTestId('wall') as HTMLElement
     fireEvent.mouseDown(wall, { clientX: 5, clientY: 5 })
+    fireEvent.mouseUp(window, { clientX: 5, clientY: 5 })
     await waitFor(() =>
       expect(
         screen.getByTestId('placement-pl-1').querySelectorAll(
@@ -2309,6 +2311,41 @@ describe('App', () => {
       fireEvent.mouseUp(window, { clientX: 220, clientY: 80 })
       await waitFor(() =>
         expect(screen.queryByTestId('marquee')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('marquee can start on the empty wall surface and selects covered photos', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwo())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('stage')
+      const wall = stubGeometry()
+
+      // Mousedown on the wall element (target = wall, NOT stage). The box
+      // (10,10)→(220,80) in client px is also (10,10)→(220,80) in cm
+      // because the stub maps the wall rect 1:1 to cm. Covers pl-a and pl-b.
+      fireEvent.mouseDown(wall, { clientX: 10, clientY: 10 })
+      fireEvent.mouseMove(window, { clientX: 220, clientY: 80 })
+      fireEvent.mouseUp(window, { clientX: 220, clientY: 80 })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+          'data-selected',
+          'true',
+        )
+        expect(screen.getByTestId('placement-pl-b')).toHaveAttribute(
+          'data-selected',
+          'true',
+        )
+      })
+      expect(screen.getByTestId('group-inspector')).toHaveTextContent(
+        '2 selected',
       )
     })
   })
