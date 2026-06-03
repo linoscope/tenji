@@ -25,6 +25,8 @@ type PlacementViewProps = {
   renderYCm?: number
   /** Fires on mousedown of the body. shiftKey signals additive multi-select. */
   onSelect: (opts: { shiftKey: boolean }) => void
+  /** Fires on right-click so the parent can open a context menu. */
+  onContextMenu?: (id: string, clientX: number, clientY: number) => void
   /** Fires on mousedown so the parent can register the active drag. */
   onMoveStart?: (id: string) => void
   /** Fires on every mousemove with the raw (un-snapped) cursor position in cm. */
@@ -52,6 +54,7 @@ export default function PlacementView({
   renderXCm,
   renderYCm,
   onSelect,
+  onContextMenu,
   onMoveStart,
   onMoveUpdate,
   onMoveEnd,
@@ -216,6 +219,12 @@ export default function PlacementView({
       data-selected={selected ? 'true' : 'false'}
       data-overlapping={overlapping ? 'true' : 'false'}
       onMouseDown={onMouseDownBody}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return
+        e.preventDefault()
+        e.stopPropagation()
+        onContextMenu(placement.id, e.clientX, e.clientY)
+      }}
       style={{
         position: 'absolute',
         left: leftPx,

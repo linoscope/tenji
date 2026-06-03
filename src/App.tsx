@@ -26,7 +26,13 @@ import PrintShop from './ui/PrintShop'
 import ProjectShare from './ui/ProjectShare'
 import { computeMarginTilePositions } from './geometry/marginTiles'
 import { DEFAULT_PLACEMENT_LONG_EDGE_CM } from './state/reducer'
-import type { ImportPhotoItem } from './state/reducer'
+import type { ImportPhotoItem, PastePlacementItem } from './state/reducer'
+import {
+  buildClipboardEntries,
+  computeCentroid,
+  computePastePositions,
+  type ClipboardEntry,
+} from './clipboard/pasteTransform'
 import {
   buildProjectEnvelope,
   parseProjectEnvelope,
@@ -148,6 +154,26 @@ export default function App({
   activeWallRef.current = activeWall
   const selectedPlacementIds = state.ui.selectedPlacementIds
   const selectionCount = selectedPlacementIds.length
+
+  // In-app clipboard. Stored in a ref (not state) because changing it doesn't
+  // need to rerender the app — paste reads it on demand. Survives wall switches
+  // and re-renders. Reset to null only when explicitly cleared.
+  type ClipboardContents = {
+    entries: ClipboardEntry[]
+    sourceWallId: string
+    sourceCenter: { xCm: number; yCm: number }
+  }
+  const clipboardRef = useRef<ClipboardContents | null>(null)
+  const [clipboardVersion, setClipboardVersion] = useState(0)
+  const clipboardHasContent = clipboardVersion > 0 && clipboardRef.current !== null
+
+  // Right-click context menu. `kind` decides which items to render:
+  //  - 'placement' (right-clicked a photo / multi-selection): Copy, Delete, Paste
+  //  - 'empty' (right-clicked the bare stage background): Paste only
+  type ContextMenu =
+    | { kind: 'placement'; xPx: number; yPx: number }
+    | { kind: 'empty'; xPx: number; yPx: number }
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const soleSelectedPlacement =
     selectionCount === 1
       ? state.placements.find((p) => p.id === selectedPlacementIds[0])
@@ -193,8 +219,52 @@ export default function App({
     dispatch({ type: 'importPhotos', items })
   }
 
+  /**
+   * Snapshot the current selection into the in-app clipboard as descriptors.
+   * No-op if the selection is empty.
+   */
+  const copySelection = useCallback(() => {
+    const ids = state.ui.selectedPlacementIds
+    if (ids.length === 0) return
+    const sources = state.placements.filter((p) => ids.includes(p.id))
+    if (sources.length === 0) return
+    const entries = buildClipboardEntries(sources)
+    const sourceCenter = computeCentroid(sources)
+    // Every source in a copy comes from the same active wall (selection is per-wall).
+    const sourceWallId = sources[0].wallId
+    clipboardRef.current = { entries, sourceWallId, sourceCenter }
+    setClipboardVersion((v) => v + 1)
+  }, [state])
+
+  /** Paste the in-app clipboard onto the active wall. No-op if clipboard is empty. */
+  const pasteFromClipboard = useCallback(() => {
+    const cb = clipboardRef.current
+    const wall = activeWallRef.current
+    if (!cb || !wall) return
+    const sameWall = cb.sourceWallId === wall.id
+    const positions = computePastePositions({
+      entries: cb.entries,
+      sourceCenter: cb.sourceCenter,
+      sameWall,
+      wall: { widthCm: wall.widthCm, heightCm: wall.heightCm },
+    })
+    const items: PastePlacementItem[] = positions.map((pos, i) => ({
+      placementId: createId(),
+      photoId: cb.entries[i].photoId,
+      wallId: wall.id,
+      xCm: pos.xCm,
+      yCm: pos.yCm,
+      longEdgeCm: pos.longEdgeCm,
+    }))
+    if (items.length === 0) return
+    dispatch({ type: 'pastePlacements', items })
+  }, [createId])
+
   // Keyboard: Delete/Backspace deletes the selection, Escape clears it,
-  // ⌘/Ctrl+Z undoes, ⌘⇧Z / Ctrl+Y / Ctrl+Shift+Z redoes.
+  // ⌘/Ctrl+Z undoes, ⌘⇧Z / Ctrl+Y / Ctrl+Shift+Z redoes,
+  // ⌘/Ctrl+C copies the current selection into the in-app clipboard.
+  // (⌘/Ctrl+V is handled by the paste-event listener so it can disambiguate
+  // between OS-clipboard images and the in-app clipboard.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Don't swallow keys when the user is typing in an input/textarea/contenteditable.
@@ -214,6 +284,12 @@ export default function App({
         dispatch({ type: 'redo' })
         return
       }
+      if (mod && (e.key === 'c' || e.key === 'C')) {
+        if (selectionCount === 0) return
+        e.preventDefault()
+        copySelection()
+        return
+      }
       if (selectionCount === 0) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
@@ -225,29 +301,44 @@ export default function App({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectionCount])
+  }, [selectionCount, copySelection])
 
-  // Clipboard paste imports any image items.
+  // Clipboard paste: content decides.
+  //  - If the OS clipboard has image data, import it (existing behavior).
+  //  - Else, if the in-app clipboard holds placements, paste them onto the
+  //    active wall. No mode toggle — the content is what disambiguates.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      // Don't hijack paste inside form inputs.
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      }
       const items = e.clipboardData?.items
-      if (!items) return
       const files: File[] = []
-      for (const item of Array.from(items)) {
-        if (item.kind === 'file') {
-          const f = item.getAsFile()
-          if (f && f.type.startsWith('image/')) files.push(f)
+      if (items) {
+        for (const item of Array.from(items)) {
+          if (item.kind === 'file') {
+            const f = item.getAsFile()
+            if (f && f.type.startsWith('image/')) files.push(f)
+          }
         }
       }
       if (files.length > 0) {
         e.preventDefault()
         void importFiles(files)
+        return
+      }
+      if (clipboardRef.current !== null) {
+        e.preventDefault()
+        pasteFromClipboard()
       }
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [pasteFromClipboard])
 
   const exportProject = useCallback(async () => {
     setProjectError(null)
@@ -478,8 +569,142 @@ export default function App({
           onResizePlacement={(id, longEdgeCm) =>
             dispatch({ type: 'resizePlacement', id, longEdgeCm })
           }
+          onContextMenuPlacement={(_id, clientX, clientY) =>
+            setContextMenu({ kind: 'placement', xPx: clientX, yPx: clientY })
+          }
+          onContextMenuEmpty={(clientX, clientY) =>
+            setContextMenu({ kind: 'empty', xPx: clientX, yPx: clientY })
+          }
         />
       ) : null}
+      {contextMenu ? (
+        <ContextMenu
+          kind={contextMenu.kind}
+          xPx={contextMenu.xPx}
+          yPx={contextMenu.yPx}
+          canPaste={clipboardHasContent}
+          onCopy={() => {
+            copySelection()
+            setContextMenu(null)
+          }}
+          onPaste={() => {
+            pasteFromClipboard()
+            setContextMenu(null)
+          }}
+          onDelete={() => {
+            dispatch({ type: 'deleteSelection' })
+            setContextMenu(null)
+          }}
+          onDismiss={() => setContextMenu(null)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+type ContextMenuProps = {
+  kind: 'placement' | 'empty'
+  xPx: number
+  yPx: number
+  canPaste: boolean
+  onCopy: () => void
+  onPaste: () => void
+  onDelete: () => void
+  onDismiss: () => void
+}
+
+function ContextMenu({
+  kind,
+  xPx,
+  yPx,
+  canPaste,
+  onCopy,
+  onPaste,
+  onDelete,
+  onDismiss,
+}: ContextMenuProps) {
+  // Close on outside click / Escape so the menu doesn't linger.
+  useEffect(() => {
+    const onMouseDown = () => onDismiss()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss()
+    }
+    // Defer registering the mousedown listener so the contextmenu event that
+    // opened us doesn't immediately close us via a same-tick mousedown.
+    const t = window.setTimeout(() => {
+      window.addEventListener('mousedown', onMouseDown)
+    }, 0)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onDismiss])
+
+  const buttonStyle: React.CSSProperties = {
+    appearance: 'none',
+    border: 'none',
+    background: 'transparent',
+    padding: '6px 12px',
+    textAlign: 'left',
+    fontSize: 13,
+    cursor: 'pointer',
+    color: '#111',
+  }
+  const disabledStyle: React.CSSProperties = {
+    ...buttonStyle,
+    cursor: 'not-allowed',
+    color: '#999',
+  }
+
+  return (
+    <div
+      data-testid="context-menu"
+      role="menu"
+      onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        position: 'fixed',
+        left: xPx,
+        top: yPx,
+        background: '#fff',
+        border: '1px solid #d0d0d0',
+        borderRadius: 4,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 120,
+        zIndex: 1000,
+      }}
+    >
+      {kind === 'placement' ? (
+        <>
+          <button type="button" onClick={onCopy} style={buttonStyle}>
+            Copy
+          </button>
+          <button
+            type="button"
+            disabled={!canPaste}
+            onClick={canPaste ? onPaste : undefined}
+            style={canPaste ? buttonStyle : disabledStyle}
+          >
+            Paste
+          </button>
+          <button type="button" onClick={onDelete} style={buttonStyle}>
+            Delete
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          disabled={!canPaste}
+          onClick={canPaste ? onPaste : undefined}
+          style={canPaste ? buttonStyle : disabledStyle}
+        >
+          Paste
+        </button>
+      )}
     </div>
   )
 }
