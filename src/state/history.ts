@@ -104,6 +104,11 @@ function classify(
       const ids = action.items.map((i) => i.placementId).join(',')
       return { kind: 'document', mergeKey: `importPhotos:${ids}` }
     }
+    case 'pastePlacements': {
+      // Unique per dispatch so successive pastes each get their own undo step.
+      const ids = action.items.map((i) => i.placementId).join(',')
+      return { kind: 'document', mergeKey: `pastePlacements:${ids}` }
+    }
     case 'movePlacement':
       return { kind: 'document', mergeKey: `movePlacement:${action.id}` }
     case 'moveSelection':

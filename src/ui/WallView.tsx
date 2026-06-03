@@ -30,6 +30,7 @@ type WallViewProps = {
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
   onMoveSelection: (dxCm: number, dyCm: number) => void
   onResizePlacement: (id: string, longEdgeCm: number) => void
+  onContextMenuPlacement?: (id: string, clientX: number, clientY: number) => void
 }
 
 const SNAP_TOLERANCE_CM = 1
@@ -74,6 +75,7 @@ export default function WallView({
   onMovePlacement,
   onMoveSelection,
   onResizePlacement,
+  onContextMenuPlacement,
 }: WallViewProps) {
   const selectedSet = new Set(selectedPlacementIds)
   const [liveDrag, setLiveDrag] = useState<LiveDrag | null>(null)
@@ -235,6 +237,13 @@ export default function WallView({
               // group drag. (A no-move click commits a collapse on mouseup —
               // see onMoveEnd below.)
               if (!isSelected) onSelectPlacement(p.id)
+            }}
+            onContextMenu={(id, clientX, clientY) => {
+              // If the right-clicked placement isn't already part of the
+              // selection, collapse to just it so menu actions act on it.
+              if (!isSelected) onSelectPlacement(id)
+              if (onContextMenuPlacement)
+                onContextMenuPlacement(id, clientX, clientY)
             }}
             onMoveStart={(id) => {
               // Group drag fires only on a plain (non-shift) click on a

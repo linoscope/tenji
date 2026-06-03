@@ -32,6 +32,10 @@ type WallStageProps = {
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
   onMoveSelection: (dxCm: number, dyCm: number) => void
   onResizePlacement: (id: string, longEdgeCm: number) => void
+  /** Right-click on a placement. The parent decides what menu to show. */
+  onContextMenuPlacement?: (id: string, clientX: number, clientY: number) => void
+  /** Right-click on the empty stage background (not on a placement). */
+  onContextMenuEmpty?: (clientX: number, clientY: number) => void
 }
 
 type MarqueeDrag = {
@@ -89,6 +93,8 @@ export default function WallStage({
   onMovePlacement,
   onMoveSelection,
   onResizePlacement,
+  onContextMenuPlacement,
+  onContextMenuEmpty,
 }: WallStageProps) {
   const ref = useRef<HTMLDivElement>(null)
   const internalWallRef = useRef<HTMLElement | null>(null)
@@ -282,6 +288,14 @@ export default function WallStage({
       ref={ref}
       data-testid="stage"
       onMouseDown={onStageMouseDown}
+      onContextMenu={(e) => {
+        // Empty-stage right-click: a child (placement) handles its own
+        // contextmenu and stops propagation; only the bare background reaches us.
+        if (e.target !== e.currentTarget) return
+        if (!onContextMenuEmpty) return
+        e.preventDefault()
+        onContextMenuEmpty(e.clientX, e.clientY)
+      }}
       style={{
         flex: 1,
         display: 'flex',
@@ -309,6 +323,7 @@ export default function WallStage({
         onMovePlacement={onMovePlacement}
         onMoveSelection={onMoveSelection}
         onResizePlacement={onResizePlacement}
+        onContextMenuPlacement={onContextMenuPlacement}
       />
       {marqueeBox ? (
         <div

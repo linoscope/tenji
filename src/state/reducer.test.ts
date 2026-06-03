@@ -640,3 +640,83 @@ describe('multi-select', () => {
     expect(after.ui.selectedPlacementIds).toEqual(['pl-legacy'])
   })
 })
+
+describe('pastePlacements', () => {
+  const seeded = (): ReturnType<typeof appReducer> => ({
+    ...initialState,
+    photos: [
+      { id: 'ph-a', filename: 'a.jpg', blobKey: 'b-a', aspectRatio: 1 },
+      { id: 'ph-b', filename: 'b.jpg', blobKey: 'b-b', aspectRatio: 1 },
+    ],
+    walls: [
+      { id: 'w1', name: 'W1', widthCm: 800, heightCm: 250 },
+      { id: 'w2', name: 'W2', widthCm: 800, heightCm: 250 },
+    ],
+    placements: [
+      { id: 'pl-1', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 30 },
+    ],
+    ui: { activeWallId: 'w2', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+  })
+
+  it('creates fresh placement instances on the named wall referencing the same photos', () => {
+    const after = appReducer(seeded(), {
+      type: 'pastePlacements',
+      items: [
+        { placementId: 'pl-new-a', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
+        { placementId: 'pl-new-b', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, longEdgeCm: 40 },
+      ],
+    })
+
+    // Originals untouched.
+    expect(after.placements.find((p) => p.id === 'pl-1')).toMatchObject({
+      photoId: 'ph-a',
+      wallId: 'w1',
+      xCm: 100,
+      yCm: 80,
+    })
+    // New placements appended in input order.
+    expect(after.placements.map((p) => p.id)).toEqual(['pl-1', 'pl-new-a', 'pl-new-b'])
+    expect(after.placements[1]).toMatchObject({
+      photoId: 'ph-a',
+      wallId: 'w2',
+      xCm: 50,
+      yCm: 60,
+      longEdgeCm: 30,
+    })
+    expect(after.placements[2]).toMatchObject({
+      photoId: 'ph-b',
+      wallId: 'w2',
+      xCm: 150,
+      yCm: 60,
+      longEdgeCm: 40,
+    })
+  })
+
+  it('does NOT create new photo entries — paste reuses existing photo ids', () => {
+    const before = seeded()
+    const after = appReducer(before, {
+      type: 'pastePlacements',
+      items: [
+        { placementId: 'pl-new', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
+      ],
+    })
+    expect(after.photos).toBe(before.photos)
+  })
+
+  it('selects the pasted placement ids', () => {
+    const after = appReducer(seeded(), {
+      type: 'pastePlacements',
+      items: [
+        { placementId: 'pl-x', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
+        { placementId: 'pl-y', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, longEdgeCm: 40 },
+      ],
+    })
+    expect(after.ui.selectedPlacementIds).toEqual(['pl-x', 'pl-y'])
+  })
+
+  it('is a no-op when items is empty', () => {
+    const before = seeded()
+    const after = appReducer(before, { type: 'pastePlacements', items: [] })
+    expect(after).toBe(before)
+  })
+})

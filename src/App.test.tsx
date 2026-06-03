@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { createMemoryStatePort } from './storage/port'
@@ -2310,6 +2310,353 @@ describe('App', () => {
       await waitFor(() =>
         expect(screen.queryByTestId('marquee')).not.toBeInTheDocument(),
       )
+    })
+  })
+
+  describe('copy/paste', () => {
+    /** Seed two walls + two photos + a couple placements on w1. */
+    const seededTwoWalls = (selected: string[] = []) => ({
+      photos: [
+        { id: 'ph-a', filename: 'a.jpg', blobKey: 'b-a', aspectRatio: 1 },
+        { id: 'ph-b', filename: 'b.jpg', blobKey: 'b-b', aspectRatio: 1 },
+      ],
+      walls: [
+        { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
+        { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
+      ],
+      placements: [
+        { id: 'pl-a', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 30 },
+        { id: 'pl-b', photoId: 'ph-b', wallId: 'w1', xCm: 200, yCm: 100, longEdgeCm: 40 },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementIds: selected,
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    })
+
+    it('⌘C then ⌘V on another wall reproduces the cluster preserving relative arrangement', async () => {
+      const user = userEvent.setup()
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a', 'pl-b']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `pasted-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      // Copy the current 2-selection on w1.
+      fireEvent.keyDown(window, { key: 'c', metaKey: true })
+
+      // Switch to w2.
+      await user.click(screen.getByRole('button', { name: /south wall/i }))
+      await waitFor(() => {
+        expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument()
+      })
+
+      // Paste via the paste event (jsdom doesn't auto-translate ⌘V).
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { items: [] } })
+      window.dispatchEvent(event)
+
+      // Two new placements appear on w2, with the same relative arrangement
+      // as the originals (Δx == 100, Δy == 0).
+      const pastedA = await screen.findByTestId('placement-pasted-1')
+      const pastedB = await screen.findByTestId('placement-pasted-2')
+      expect(pastedA).toHaveAttribute('data-photo-id', 'ph-a')
+      expect(pastedB).toHaveAttribute('data-photo-id', 'ph-b')
+      const ax = Number(pastedA.getAttribute('data-x-cm'))
+      const bx = Number(pastedB.getAttribute('data-x-cm'))
+      const ay = Number(pastedA.getAttribute('data-y-cm'))
+      const by = Number(pastedB.getAttribute('data-y-cm'))
+      expect(bx - ax).toBeCloseTo(100)
+      expect(by - ay).toBeCloseTo(0)
+      // Same coordinates as the originals (cross-wall paste anchors on source).
+      expect(ax).toBeCloseTo(100)
+      expect(ay).toBeCloseTo(100)
+      // Pasted placements are selected, originals on w1 remain intact.
+      expect(screen.getByTestId('group-inspector')).toHaveTextContent('2 selected')
+    })
+
+    it('same-wall paste offsets so copies do not sit exactly on top of the originals', async () => {
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `same-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      fireEvent.keyDown(window, { key: 'c', metaKey: true })
+
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { items: [] } })
+      window.dispatchEvent(event)
+
+      const pasted = await screen.findByTestId('placement-same-1')
+      expect(pasted).toHaveAttribute('data-photo-id', 'ph-a')
+      const px = Number(pasted.getAttribute('data-x-cm'))
+      const py = Number(pasted.getAttribute('data-y-cm'))
+      // The original is at (100, 100); the copy must be offset.
+      expect(px).not.toBe(100)
+      expect(py).not.toBe(100)
+    })
+
+    it('a paste with an image on the OS clipboard imports (does not paste in-app)', async () => {
+      let n = 0
+      const seeded = seededTwoWalls(['pl-a'])
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `imp-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      // Copy so the in-app clipboard is populated.
+      fireEvent.keyDown(window, { key: 'c', metaKey: true })
+
+      // OS clipboard has an image — that should win.
+      const file = new File(['data'], 'fromOs.png', { type: 'image/png' })
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          items: [
+            { kind: 'file', type: 'image/png', getAsFile: () => file },
+          ],
+        },
+      })
+      window.dispatchEvent(event)
+
+      // The OS clipboard image is imported (a new photo lands in the margin).
+      expect(await screen.findByAltText('fromOs.png')).toBeInTheDocument()
+    })
+
+    it('⌘C with an empty selection does not populate the clipboard', async () => {
+      let n = 0
+      const seeded = seededTwoWalls() // no selection
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `nop-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      fireEvent.keyDown(window, { key: 'c', metaKey: true })
+
+      // Paste should be a no-op — no new placements.
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { items: [] } })
+      window.dispatchEvent(event)
+
+      // We never minted any ids.
+      expect(screen.queryByTestId('placement-nop-1')).not.toBeInTheDocument()
+    })
+
+    it('Ctrl+C also copies', async () => {
+      const user = userEvent.setup()
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `ctl-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      fireEvent.keyDown(window, { key: 'c', ctrlKey: true })
+      await user.click(screen.getByRole('button', { name: /south wall/i }))
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { items: [] } })
+      window.dispatchEvent(event)
+
+      expect(await screen.findByTestId('placement-ctl-1')).toBeInTheDocument()
+    })
+
+    it('right-click on a placement opens a menu with Copy/Delete/Paste; clicking Copy + switching wall + clicking Paste reproduces the cluster', async () => {
+      const user = userEvent.setup()
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a', 'pl-b']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `ctx-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const a = await screen.findByTestId('placement-pl-a')
+      fireEvent.contextMenu(a, { clientX: 100, clientY: 100 })
+
+      const menu = await screen.findByTestId('context-menu')
+      // Copy and Delete present; Paste enabled while clipboard is empty -> disabled.
+      const copyBtn = within(menu).getByRole('button', { name: /^copy$/i })
+      const deleteBtn = within(menu).getByRole('button', { name: /^delete$/i })
+      const pasteBtn = within(menu).getByRole('button', { name: /^paste$/i })
+      expect(menu).toBeInTheDocument()
+      expect(copyBtn).toBeEnabled()
+      expect(deleteBtn).toBeEnabled()
+      expect(pasteBtn).toBeDisabled()
+
+      await user.click(copyBtn)
+      // Menu closes after a click.
+      await waitFor(() =>
+        expect(screen.queryByTestId('context-menu')).not.toBeInTheDocument(),
+      )
+
+      // Switch to w2 and paste via context menu on the empty stage.
+      await user.click(screen.getByRole('button', { name: /south wall/i }))
+      await waitFor(() => {
+        expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument()
+      })
+
+      const stage = screen.getByTestId('stage')
+      fireEvent.contextMenu(stage, { clientX: 100, clientY: 100 })
+      const menu2 = await screen.findByTestId('context-menu')
+      // Empty-stage menu shows only Paste.
+      expect(within(menu2).queryByRole('button', { name: /^copy$/i })).not.toBeInTheDocument()
+      expect(within(menu2).queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+      const pasteOnEmpty = within(menu2).getByRole('button', { name: /^paste$/i })
+      expect(pasteOnEmpty).toBeEnabled()
+
+      await user.click(pasteOnEmpty)
+      expect(await screen.findByTestId('placement-ctx-1')).toBeInTheDocument()
+      expect(await screen.findByTestId('placement-ctx-2')).toBeInTheDocument()
+    })
+
+    it('right-clicking an unselected placement makes it the selection before showing the menu', async () => {
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls([]))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `rc-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const b = await screen.findByTestId('placement-pl-b')
+      fireEvent.contextMenu(b, { clientX: 200, clientY: 100 })
+
+      await screen.findByTestId('context-menu')
+      // Verify the right-clicked placement is now selected.
+      await waitFor(() =>
+        expect(b).toHaveAttribute('data-selected', 'true'),
+      )
+      // The other placement is not.
+      expect(screen.getByTestId('placement-pl-a')).toHaveAttribute(
+        'data-selected',
+        'false',
+      )
+    })
+
+    it('right-click context menu Delete removes the selection', async () => {
+      const user = userEvent.setup()
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const a = await screen.findByTestId('placement-pl-a')
+      fireEvent.contextMenu(a, { clientX: 100, clientY: 100 })
+
+      const menu = await screen.findByTestId('context-menu')
+      await user.click(within(menu).getByRole('button', { name: /^delete$/i }))
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('right-click on empty stage shows only Paste; Paste is disabled when clipboard is empty', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const stage = await screen.findByTestId('stage')
+      fireEvent.contextMenu(stage, { clientX: 50, clientY: 50 })
+
+      const menu = await screen.findByTestId('context-menu')
+      expect(within(menu).queryByRole('button', { name: /^copy$/i })).not.toBeInTheDocument()
+      expect(within(menu).queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+      expect(within(menu).getByRole('button', { name: /^paste$/i })).toBeDisabled()
+    })
+
+    it('the menu closes when the user clicks outside it', async () => {
+      const user = userEvent.setup()
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const a = await screen.findByTestId('placement-pl-a')
+      fireEvent.contextMenu(a, { clientX: 100, clientY: 100 })
+      await screen.findByTestId('context-menu')
+
+      // Click somewhere else.
+      await user.click(screen.getByRole('button', { name: /add wall/i }))
+      await waitFor(() =>
+        expect(screen.queryByTestId('context-menu')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('⌘C inside a text input is ignored (native copy survives)', async () => {
+      const user = userEvent.setup()
+      let n = 0
+      render(
+        <App
+          port={createMemoryStatePort(seededTwoWalls(['pl-a']))}
+          blobStore={createMemoryBlobStore()}
+          createId={() => `inp-${++n}`}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-a')
+
+      const nameInput = screen.getByLabelText(/wall name/i)
+      await user.click(nameInput)
+      fireEvent.keyDown(nameInput, { key: 'c', metaKey: true })
+
+      // Clipboard should not have been populated — paste should be a no-op.
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { items: [] } })
+      // Target the window so the paste handler runs.
+      window.dispatchEvent(event)
+
+      expect(screen.queryByTestId('placement-inp-1')).not.toBeInTheDocument()
     })
   })
 

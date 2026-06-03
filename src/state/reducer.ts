@@ -28,6 +28,15 @@ export type ImportPhotoItem = {
   yCm: number
 }
 
+export type PastePlacementItem = {
+  placementId: string
+  photoId: string
+  wallId: string
+  xCm: number
+  yCm: number
+  longEdgeCm: number
+}
+
 export type Action =
   | {
       type: 'createWall'
@@ -41,6 +50,7 @@ export type Action =
   | { type: 'resizeWall'; id: string; widthCm: number; heightCm: number }
   | { type: 'deleteWall'; id: string }
   | { type: 'importPhotos'; items: ImportPhotoItem[] }
+  | { type: 'pastePlacements'; items: PastePlacementItem[] }
   | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
   | { type: 'moveSelection'; dxCm: number; dyCm: number }
   | { type: 'resizePlacement'; id: string; longEdgeCm: number }
@@ -158,6 +168,25 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         photos: [...state.photos, ...newPhotos],
+        placements: [...state.placements, ...newPlacements],
+        ui: {
+          ...state.ui,
+          selectedPlacementIds: newPlacements.map((p) => p.id),
+        },
+      }
+    }
+    case 'pastePlacements': {
+      if (action.items.length === 0) return state
+      const newPlacements = action.items.map((it) => ({
+        id: it.placementId,
+        photoId: it.photoId,
+        wallId: it.wallId,
+        xCm: it.xCm,
+        yCm: it.yCm,
+        longEdgeCm: it.longEdgeCm,
+      }))
+      return {
+        ...state,
         placements: [...state.placements, ...newPlacements],
         ui: {
           ...state.ui,
