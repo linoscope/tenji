@@ -248,6 +248,26 @@ export default function App({
     | { kind: 'placement'; xPx: number; yPx: number }
     | { kind: 'empty'; xPx: number; yPx: number }
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+  // Sidebar wall context menu (Duplicate). Tracks the right-clicked wall id so
+  // the action operates on it regardless of whether it's the active wall.
+  const [wallContextMenu, setWallContextMenu] = useState<
+    { wallId: string; xPx: number; yPx: number } | null
+  >(null)
+
+  const duplicateWall = useCallback(
+    (sourceId: string) => {
+      const sourcePlacements = state.placements.filter(
+        (p) => p.wallId === sourceId,
+      )
+      dispatch({
+        type: 'duplicateWall',
+        sourceId,
+        newWallId: createId(),
+        newPlacementIds: sourcePlacements.map(() => createId()),
+      })
+    },
+    [createId, state.placements],
+  )
   const soleSelectedPlacement =
     selectionCount === 1
       ? state.placements.find((p) => p.id === selectedPlacementIds[0])
@@ -554,7 +574,16 @@ export default function App({
               <li key={wall.id} style={{ marginBottom: 2 }}>
                 <button
                   type="button"
+                  data-testid={`wall-item-${wall.id}`}
                   onClick={() => dispatch({ type: 'selectWall', id: wall.id })}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setWallContextMenu({
+                      wallId: wall.id,
+                      xPx: e.clientX,
+                      yPx: e.clientY,
+                    })
+                  }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
@@ -711,6 +740,17 @@ export default function App({
           onDismiss={() => setContextMenu(null)}
         />
       ) : null}
+      {wallContextMenu ? (
+        <WallContextMenu
+          xPx={wallContextMenu.xPx}
+          yPx={wallContextMenu.yPx}
+          onDuplicate={() => {
+            duplicateWall(wallContextMenu.wallId)
+            setWallContextMenu(null)
+          }}
+          onDismiss={() => setWallContextMenu(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -818,6 +858,75 @@ function ContextMenu({
           Paste
         </button>
       )}
+    </div>
+  )
+}
+
+type WallContextMenuProps = {
+  xPx: number
+  yPx: number
+  onDuplicate: () => void
+  onDismiss: () => void
+}
+
+function WallContextMenu({
+  xPx,
+  yPx,
+  onDuplicate,
+  onDismiss,
+}: WallContextMenuProps) {
+  useEffect(() => {
+    const onMouseDown = () => onDismiss()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss()
+    }
+    const t = window.setTimeout(() => {
+      window.addEventListener('mousedown', onMouseDown)
+    }, 0)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onDismiss])
+
+  return (
+    <div
+      data-testid="wall-context-menu"
+      role="menu"
+      onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        position: 'fixed',
+        left: xPx,
+        top: yPx,
+        background: '#fff',
+        border: '1px solid #d0d0d0',
+        borderRadius: 4,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 120,
+        zIndex: 1000,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onDuplicate}
+        style={{
+          appearance: 'none',
+          border: 'none',
+          background: 'transparent',
+          padding: '6px 12px',
+          textAlign: 'left',
+          fontSize: 13,
+          cursor: 'pointer',
+          color: '#111',
+        }}
+      >
+        Duplicate
+      </button>
     </div>
   )
 }

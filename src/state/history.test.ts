@@ -347,6 +347,40 @@ describe('history: depth cap', () => {
   })
 })
 
+describe('history: duplicateWall is one undo step', () => {
+  it('undo removes both the duplicated wall and its cloned placements in a single step', () => {
+    const initial = seededState()
+    const h0 = createHistoryState(initial)
+    const now = clockFrom([1000, 2000])
+
+    const h1 = historyReducer(
+      h0,
+      {
+        type: 'duplicateWall',
+        sourceId: 'w1',
+        newWallId: 'w1-copy',
+        newPlacementIds: ['pl1-copy'],
+      },
+      now,
+    )
+    expect(h1.past).toHaveLength(1)
+    expect(h1.present.walls.map((w) => w.id)).toEqual([
+      'w1',
+      'w1-copy',
+      'w2',
+    ])
+    expect(
+      h1.present.placements.filter((p) => p.wallId === 'w1-copy'),
+    ).toHaveLength(1)
+
+    const h2 = historyReducer(h1, { type: 'undo' }, now)
+    expect(h2.present.walls.map((w) => w.id)).toEqual(['w1', 'w2'])
+    expect(
+      h2.present.placements.find((p) => p.id === 'pl1-copy'),
+    ).toBeUndefined()
+  })
+})
+
 describe('history: hydrate and import reset', () => {
   it('hydrate clears past and future', () => {
     const initial = seededState()

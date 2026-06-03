@@ -1,4 +1,4 @@
-import type { AppState, Placement, PlacementSize } from './types'
+import type { AppState, Placement, PlacementSize, Wall } from './types'
 
 export const DEFAULT_WALL_WIDTH_CM = 800
 export const DEFAULT_WALL_HEIGHT_CM = 250
@@ -83,6 +83,18 @@ export type Action =
   | { type: 'deleteWall'; id: string }
   | { type: 'importPhotos'; items: ImportPhotoItem[] }
   | { type: 'pastePlacements'; items: PastePlacementItem[] }
+  | {
+      type: 'duplicateWall'
+      sourceId: string
+      newWallId: string
+      /** Optional override; defaults to `"<source name> copy"`. */
+      name?: string
+      /**
+       * One id per source-wall placement, in the same order the placements
+       * appear in `state.placements`. Empty array allowed for empty walls.
+       */
+      newPlacementIds: string[]
+    }
   | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
   | { type: 'moveSelection'; dxCm: number; dyCm: number }
   | { type: 'setPlacementSize'; id: string; size: PlacementSize }
@@ -228,6 +240,43 @@ export function appReducer(state: AppState, action: Action): AppState {
         ui: {
           ...state.ui,
           selectedPlacementIds: newPlacements.map((p) => p.id),
+        },
+      }
+    }
+    case 'duplicateWall': {
+      const sourceIndex = state.walls.findIndex((w) => w.id === action.sourceId)
+      if (sourceIndex === -1) return state
+      const source = state.walls[sourceIndex]
+      const sourcePlacements = state.placements.filter(
+        (p) => p.wallId === action.sourceId,
+      )
+      const newWall: Wall = {
+        id: action.newWallId,
+        name: action.name ?? `${source.name} copy`,
+        widthCm: source.widthCm,
+        heightCm: source.heightCm,
+      }
+      const clones: Placement[] = sourcePlacements.map((p, i) => ({
+        id: action.newPlacementIds[i],
+        photoId: p.photoId,
+        wallId: newWall.id,
+        xCm: p.xCm,
+        yCm: p.yCm,
+        size: p.size,
+      }))
+      const walls = [
+        ...state.walls.slice(0, sourceIndex + 1),
+        newWall,
+        ...state.walls.slice(sourceIndex + 1),
+      ]
+      return {
+        ...state,
+        walls,
+        placements: [...state.placements, ...clones],
+        ui: {
+          ...state.ui,
+          activeWallId: newWall.id,
+          selectedPlacementIds: [],
         },
       }
     }

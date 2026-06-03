@@ -109,6 +109,13 @@ function classify(
       const ids = action.items.map((i) => i.placementId).join(',')
       return { kind: 'document', mergeKey: `pastePlacements:${ids}` }
     }
+    case 'duplicateWall': {
+      // Unique per dispatch so successive duplicates each get their own undo step.
+      return {
+        kind: 'document',
+        mergeKey: `duplicateWall:${action.sourceId}->${action.newWallId}`,
+      }
+    }
     case 'movePlacement':
       return { kind: 'document', mergeKey: `movePlacement:${action.id}` }
     case 'moveSelection':

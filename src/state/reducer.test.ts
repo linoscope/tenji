@@ -839,3 +839,235 @@ describe('pastePlacements', () => {
     expect(after).toBe(before)
   })
 })
+
+describe('duplicateWall', () => {
+  const seeded = (): ReturnType<typeof appReducer> => ({
+    ...initialState,
+    photos: [
+      { id: 'ph-a', filename: 'a.jpg', blobKey: 'b-a', aspectRatio: 1 },
+      { id: 'ph-b', filename: 'b.jpg', blobKey: 'b-b', aspectRatio: 1.5 },
+    ],
+    walls: [
+      { id: 'w1', name: 'North', widthCm: 800, heightCm: 250 },
+      { id: 'w2', name: 'South', widthCm: 600, heightCm: 220 },
+      { id: 'w3', name: 'East', widthCm: 500, heightCm: 200 },
+    ],
+    placements: [
+      // Two on-wall placements on w2 (the one we'll duplicate).
+      {
+        id: 'pl-1',
+        photoId: 'ph-a',
+        wallId: 'w2',
+        xCm: 100,
+        yCm: 80,
+        size: { mode: 'aspect' as const, longEdgeCm: 30 },
+      },
+      {
+        id: 'pl-2',
+        photoId: 'ph-b',
+        wallId: 'w2',
+        xCm: 200,
+        yCm: 90,
+        size: { mode: 'crop' as const, widthCm: 42, heightCm: 28 },
+      },
+      // One margin-parked placement on w2 (negative xCm => outside the wall).
+      {
+        id: 'pl-3',
+        photoId: 'ph-a',
+        wallId: 'w2',
+        xCm: -40,
+        yCm: 50,
+        size: { mode: 'aspect' as const, longEdgeCm: 25 },
+      },
+      // A placement on w1 — should be untouched by duplicating w2.
+      {
+        id: 'pl-other',
+        photoId: 'ph-a',
+        wallId: 'w1',
+        xCm: 50,
+        yCm: 60,
+        size: { mode: 'aspect' as const, longEdgeCm: 20 },
+      },
+    ],
+    ui: {
+      activeWallId: 'w1',
+      selectedPlacementIds: ['pl-other'],
+      rulerEnabled: true,
+      silhouetteEnabled: true,
+    },
+  })
+  it('creates a new wall with the same dimensions, named "<name> copy"', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    const copy = after.walls.find((w) => w.id === 'w2-copy')
+    expect(copy).toMatchObject({
+      id: 'w2-copy',
+      name: 'South copy',
+      widthCm: 600,
+      heightCm: 220,
+    })
+  })
+
+  it('clones every placement on the source wall (including margin-parked) with new ids and the new wall id, preserving photo/size/position', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    const clones = after.placements.filter((p) => p.wallId === 'w2-copy')
+    expect(clones).toHaveLength(3)
+    expect(clones.map((p) => p.id)).toEqual(['new-1', 'new-2', 'new-3'])
+    expect(clones[0]).toMatchObject({
+      id: 'new-1',
+      photoId: 'ph-a',
+      wallId: 'w2-copy',
+      xCm: 100,
+      yCm: 80,
+      size: { mode: 'aspect', longEdgeCm: 30 },
+    })
+    expect(clones[1]).toMatchObject({
+      id: 'new-2',
+      photoId: 'ph-b',
+      wallId: 'w2-copy',
+      xCm: 200,
+      yCm: 90,
+      size: { mode: 'crop', widthCm: 42, heightCm: 28 },
+    })
+    // Margin-parked one carried over too.
+    expect(clones[2]).toMatchObject({
+      id: 'new-3',
+      photoId: 'ph-a',
+      wallId: 'w2-copy',
+      xCm: -40,
+      yCm: 50,
+      size: { mode: 'aspect', longEdgeCm: 25 },
+    })
+  })
+
+  it('leaves the source wall and its placements unchanged', () => {
+    const before = seeded()
+    const after = appReducer(before, {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    const source = after.walls.find((w) => w.id === 'w2')
+    expect(source).toEqual(before.walls.find((w) => w.id === 'w2'))
+    for (const id of ['pl-1', 'pl-2', 'pl-3', 'pl-other']) {
+      expect(after.placements.find((p) => p.id === id)).toEqual(
+        before.placements.find((p) => p.id === id),
+      )
+    }
+  })
+
+  it('does NOT create new photo entries — photos are shared', () => {
+    const before = seeded()
+    const after = appReducer(before, {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    expect(after.photos).toBe(before.photos)
+  })
+
+  it('inserts the new wall immediately after the source in the walls list', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    expect(after.walls.map((w) => w.id)).toEqual(['w1', 'w2', 'w2-copy', 'w3'])
+  })
+
+  it('switches the active wall to the copy and clears the selection', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    expect(after.ui.activeWallId).toBe('w2-copy')
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
+  it('duplicates an empty wall with no placements (creates only the wall copy)', () => {
+    const before: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'wEmpty', name: 'Blank', widthCm: 400, heightCm: 200 }],
+      placements: [],
+      ui: {
+        activeWallId: 'wEmpty',
+        selectedPlacementIds: [],
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    }
+    const after = appReducer(before, {
+      type: 'duplicateWall',
+      sourceId: 'wEmpty',
+      newWallId: 'wEmpty-copy',
+      newPlacementIds: [],
+    })
+    expect(after.walls.map((w) => w.id)).toEqual(['wEmpty', 'wEmpty-copy'])
+    expect(after.walls[1]).toMatchObject({ name: 'Blank copy', widthCm: 400, heightCm: 200 })
+    expect(after.placements).toEqual([])
+    expect(after.ui.activeWallId).toBe('wEmpty-copy')
+    expect(after.ui.selectedPlacementIds).toEqual([])
+  })
+
+  it('uses an explicit name override when provided', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      name: 'Variant B',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    expect(after.walls.find((w) => w.id === 'w2-copy')).toMatchObject({
+      name: 'Variant B',
+    })
+  })
+
+  it('is a no-op when the source wall does not exist', () => {
+    const before = seeded()
+    const after = appReducer(before, {
+      type: 'duplicateWall',
+      sourceId: 'missing',
+      newWallId: 'never',
+      newPlacementIds: [],
+    })
+    expect(after).toBe(before)
+  })
+
+  it('clones placements independently — editing a clone does not touch the original', () => {
+    const after = appReducer(seeded(), {
+      type: 'duplicateWall',
+      sourceId: 'w2',
+      newWallId: 'w2-copy',
+      newPlacementIds: ['new-1', 'new-2', 'new-3'],
+    })
+    const next = appReducer(after, {
+      type: 'movePlacement',
+      id: 'new-1',
+      xCm: 999,
+      yCm: 999,
+    })
+    expect(next.placements.find((p) => p.id === 'new-1')).toMatchObject({
+      xCm: 999,
+      yCm: 999,
+    })
+    // Original on the source wall is untouched.
+    expect(next.placements.find((p) => p.id === 'pl-1')).toMatchObject({
+      xCm: 100,
+      yCm: 80,
+    })
+  })
+})
