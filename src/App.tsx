@@ -43,6 +43,8 @@ import {
   browserBlobToBase64,
 } from './projectShare/io'
 import { projectExportFilename } from './projectShare/filename'
+import type { ShareStore } from './projectShare/shareStore'
+import { buildShareUrl, parseShareId, type ShareUrlBase } from './projectShare/shareHash'
 
 type AppProps = {
   port?: StatePort
@@ -59,6 +61,17 @@ type AppProps = {
   confirmReplace?: (message: string) => boolean
   /** Injected clock for history coalescing (ms timestamps). */
   historyNow?: () => number
+  /**
+   * Share transport (Supabase in production). When `null`/undefined the Share
+   * UI is hidden and `#share=<id>` auto-loading is skipped. Config is resolved
+   * at the app boundary (main.tsx) and injected here, so App stays env-free and
+   * tests drive "configured vs not" by passing a fake store or null.
+   */
+  shareStore?: ShareStore | null
+  /** Test seam: the current share id from the URL hash (default: window.location). */
+  getInitialShareId?: () => string | null
+  /** Test seam: base used to assemble the share URL (default: window.location). */
+  shareUrlOrigin?: ShareUrlBase
 }
 
 const REPLACE_PROMPT = 'Importing replaces your current plan. Continue?'
@@ -94,7 +107,15 @@ export default function App({
       ? window.confirm(msg)
       : true,
   historyNow,
+  shareStore = null,
+  getInitialShareId = () =>
+    typeof window !== 'undefined' ? parseShareId(window.location.hash) : null,
+  shareUrlOrigin = typeof window !== 'undefined'
+    ? { origin: window.location.origin, pathname: window.location.pathname }
+    : { origin: '', pathname: '/' },
 }: AppProps) {
+  const shareStoreRef = useRef<ShareStore | null>(shareStore)
+  const shareEnabled = shareStoreRef.current !== null
   const portRef = useRef<StatePort>(port ?? createIdbStatePort())
   const blobStoreRef = useRef<BlobStore>(blobStore ?? createIdbBlobStore())
   const exportPortRef = useRef<ExportPort>(
@@ -122,22 +143,75 @@ export default function App({
   const [exporting, setExporting] = useState(false)
   const [projectBusy, setProjectBusy] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
+  const [shareCreating, setShareCreating] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
 
-  // Load saved state once; if there is nothing to restore, start with a wall.
+  // Restore image blobs from an envelope's base64 map into the blob store.
+  const restoreImages = useCallback(
+    async (images: Record<string, string>) => {
+      for (const [key, dataUrl] of Object.entries(images)) {
+        const blob = await base64ToBlob(dataUrl)
+        await blobStoreRef.current.save(key, blob)
+      }
+    },
+    [base64ToBlob],
+  )
+
+  // Fetch a shared snapshot by id and apply it (guarded replace). Returns
+  // whether the plan was loaded.
+  const loadSharedSnapshot = useCallback(
+    async (id: string, guard: boolean): Promise<boolean> => {
+      const store = shareStoreRef.current
+      if (!store) return false
+      setShareError(null)
+      try {
+        const json = await store.fetchSnapshot(id)
+        const result = parseProjectEnvelope(JSON.parse(json))
+        if (!result.ok) {
+          setShareError(`Could not open shared plan (${result.error}).`)
+          return false
+        }
+        if (guard && !confirmReplace(REPLACE_PROMPT)) return false
+        await restoreImages(result.envelope.images)
+        dispatch({ type: 'hydrate', state: result.envelope.state })
+        return true
+      } catch {
+        setShareError('Could not open shared plan.')
+        return false
+      }
+    },
+    [confirmReplace, restoreImages],
+  )
+
+  // Load once: a `#share=<id>` link (when sharing is configured) wins, loaded
+  // via guarded replace; otherwise restore saved state or start a wall.
   useEffect(() => {
     let cancelled = false
-    portRef.current.load().then((saved) => {
+    ;(async () => {
+      const shareId = getInitialShareId()
+      const saved = await portRef.current.load()
       if (cancelled) return
-      if (saved && saved.walls.length > 0) {
-        dispatch({ type: 'hydrate', state: saved })
-      } else {
-        dispatch({ type: 'createWall', id: createId() })
+      const hasSaved = !!saved && saved.walls.length > 0
+
+      if (shareId && shareStoreRef.current) {
+        const loaded = await loadSharedSnapshot(shareId, hasSaved)
+        if (cancelled) return
+        if (loaded) {
+          setHydrated(true)
+          return
+        }
+        // fall through to normal load if the share failed or was declined
       }
+
+      if (hasSaved) dispatch({ type: 'hydrate', state: saved! })
+      else dispatch({ type: 'createWall', id: createId() })
       setHydrated(true)
-    })
+    })()
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createId])
 
   // Persist after every change, once we have finished hydrating.
@@ -380,17 +454,45 @@ export default function App({
           state.walls.length === 0 && state.photos.length === 0
         if (!isEmpty && !confirmReplace(REPLACE_PROMPT)) return
         // Restore image blobs first so the new state has data to display.
-        for (const [key, dataUrl] of Object.entries(result.envelope.images)) {
-          const blob = await base64ToBlob(dataUrl)
-          await blobStoreRef.current.save(key, blob)
-        }
+        await restoreImages(result.envelope.images)
         dispatch({ type: 'hydrate', state: result.envelope.state })
       } finally {
         setProjectBusy(false)
       }
     },
-    [state.walls.length, state.photos.length, confirmReplace, base64ToBlob],
+    [state.walls.length, state.photos.length, confirmReplace, restoreImages],
   )
+
+  // Create a shareable Supabase link from the current plan and copy it.
+  const createShareLink = useCallback(async () => {
+    const store = shareStoreRef.current
+    if (!store) return
+    setShareError(null)
+    setShareUrl(null)
+    setShareCreating(true)
+    try {
+      const envelope = await buildProjectEnvelope({
+        state,
+        loadBlob: (key) => blobStoreRef.current.load(key),
+        blobToBase64,
+        now: projectNowRef.current,
+      })
+      const { id } = await store.createSnapshot(JSON.stringify(envelope))
+      const url = buildShareUrl(shareUrlOrigin, id)
+      setShareUrl(url)
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(url)
+        } catch {
+          /* clipboard may be unavailable; the field is still copyable */
+        }
+      }
+    } catch {
+      setShareError('Could not create share link.')
+    } finally {
+      setShareCreating(false)
+    }
+  }, [state, blobToBase64, shareUrlOrigin])
 
   const exportActiveWall = useCallback(async () => {
     if (!activeWall) return
@@ -546,6 +648,11 @@ export default function App({
           onPickImportFile={(file) => void importProject(file)}
           error={projectError}
           busy={projectBusy}
+          shareEnabled={shareEnabled}
+          onCreateShareLink={() => void createShareLink()}
+          shareCreating={shareCreating}
+          shareUrl={shareUrl}
+          shareError={shareError}
         />
       </aside>
       {activeWall ? (
