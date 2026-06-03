@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   A_SERIES_PRESETS,
   computeSizeFromLongEdge,
+  resolvePlacementSize,
   resolveSizeLabel,
 } from './sizing'
 
@@ -62,5 +63,58 @@ describe('resolveSizeLabel', () => {
   it('tolerates tiny float drift around a preset', () => {
     expect(resolveSizeLabel(42.0000001)).toBe('A3')
     expect(resolveSizeLabel(29.69999)).toBe('A4')
+  })
+})
+
+describe('resolvePlacementSize', () => {
+  it('aspect mode uses the photo aspect ratio (long edge becomes width on landscape)', () => {
+    const result = resolvePlacementSize(
+      { mode: 'aspect', longEdgeCm: 42 },
+      3 / 2,
+    )
+
+    expect(result.widthCm).toBeCloseTo(42)
+    expect(result.heightCm).toBeCloseTo(28)
+    expect(result.orientation).toBe('landscape')
+  })
+
+  it('aspect mode uses the photo aspect ratio (long edge becomes height on portrait)', () => {
+    const result = resolvePlacementSize(
+      { mode: 'aspect', longEdgeCm: 42 },
+      2 / 3,
+    )
+
+    expect(result.widthCm).toBeCloseTo(28)
+    expect(result.heightCm).toBeCloseTo(42)
+    expect(result.orientation).toBe('portrait')
+  })
+
+  it('crop mode passes width/height through and ignores the photo aspect ratio', () => {
+    const result = resolvePlacementSize(
+      { mode: 'crop', widthCm: 30, heightCm: 40 },
+      2 / 3,
+    )
+
+    expect(result.widthCm).toBe(30)
+    expect(result.heightCm).toBe(40)
+    expect(result.orientation).toBe('portrait')
+  })
+
+  it('crop mode reports landscape when widthCm > heightCm regardless of photo aspect', () => {
+    const result = resolvePlacementSize(
+      { mode: 'crop', widthCm: 42, heightCm: 29.7 },
+      2 / 3, // portrait photo, but crop is landscape
+    )
+
+    expect(result.orientation).toBe('landscape')
+  })
+
+  it('crop mode reports square when widthCm == heightCm', () => {
+    const result = resolvePlacementSize(
+      { mode: 'crop', widthCm: 30, heightCm: 30 },
+      1.5,
+    )
+
+    expect(result.orientation).toBe('square')
   })
 })

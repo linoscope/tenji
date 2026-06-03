@@ -31,7 +31,7 @@ function seededWithSinglePlacement(selectedIds: string[] = []) {
         wallId: 'w1',
         xCm: 100,
         yCm: 60,
-        longEdgeCm: 42,
+        size: { mode: 'aspect' as const, longEdgeCm: 42 },
       },
     ],
     ui: {
@@ -347,7 +347,7 @@ describe('App', () => {
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
         // Centre in the bottom margin (y > heightCm).
-        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 250, yCm: 360, longEdgeCm: 42 },
+        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 250, yCm: 360, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -489,7 +489,7 @@ describe('App', () => {
     )
 
     const placement = await screen.findByTestId('placement-pl-1')
-    const initialLongEdge = Number(placement.getAttribute('data-long-edge-cm'))
+    const initialWidth = Number(placement.getAttribute('data-width-cm'))
 
     const handle = placement.querySelector(
       '[data-resize-handle="se"]',
@@ -502,8 +502,8 @@ describe('App', () => {
 
     await waitFor(() => {
       const after = screen.getByTestId('placement-pl-1')
-      expect(Number(after.getAttribute('data-long-edge-cm'))).toBeGreaterThan(
-        initialLongEdge,
+      expect(Number(after.getAttribute('data-width-cm'))).toBeGreaterThan(
+        initialWidth,
       )
     })
   })
@@ -544,9 +544,8 @@ describe('App', () => {
 
     await waitFor(() => {
       const placement = screen.getByTestId('placement-pl-1')
-      expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(
-        59.4,
-      )
+      // A2 on a landscape photo (aspect 1.5): widthCm = 59.4
+      expect(Number(placement.getAttribute('data-width-cm'))).toBeCloseTo(59.4)
     })
     expect(screen.getByTestId('placement-inspector')).toHaveTextContent('A2')
   })
@@ -569,7 +568,8 @@ describe('App', () => {
 
     await waitFor(() => {
       const placement = screen.getByTestId('placement-pl-1')
-      expect(Number(placement.getAttribute('data-long-edge-cm'))).toBeCloseTo(50)
+      // Aspect 1.5 landscape photo: widthCm = 50, heightCm ≈ 33.3.
+      expect(Number(placement.getAttribute('data-width-cm'))).toBeCloseTo(50)
     })
     expect(screen.getByTestId('placement-inspector')).toHaveTextContent('Custom')
   })
@@ -602,8 +602,8 @@ describe('App', () => {
         { id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 },
       ],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 110, yCm: 150, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 110, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -630,8 +630,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 400, yCm: 250, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 400, yCm: 250, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -661,8 +661,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 302 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -716,7 +716,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -761,7 +761,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
         {
           id: 'pl-2',
@@ -769,7 +769,7 @@ describe('App', () => {
           wallId: 'w2',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
@@ -812,7 +812,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
@@ -849,7 +849,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: -40,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -894,9 +894,9 @@ describe('App', () => {
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
         // pl-a center-Y = 150
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
         // pl-b center-Y = 150.5 → within 1cm tolerance of pl-a's 150
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150.5, longEdgeCm: 42 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 150.5, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -985,7 +985,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: {
@@ -1072,7 +1072,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
         {
           id: 'pl-2',
@@ -1080,7 +1080,7 @@ describe('App', () => {
           wallId: 'w2',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
         // photo-2 only has a margin-parked placement, so it should not count.
         {
@@ -1089,7 +1089,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 250,
           yCm: 400, // below the wall
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: {
@@ -1115,7 +1115,7 @@ describe('App', () => {
     const rows = table.querySelectorAll('[data-testid^="print-row-"]')
     expect(rows).toHaveLength(1)
 
-    const row = screen.getByTestId('print-row-photo-1-42')
+    const row = screen.getByTestId('print-row-photo-1-42-28')
     expect(row).toHaveTextContent('sunset.jpg')
     expect(row).toHaveTextContent('A3')
     expect(row).toHaveTextContent('42')
@@ -1143,7 +1143,7 @@ describe('App', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 100,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: {
@@ -1205,8 +1205,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -1251,8 +1251,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -1288,8 +1288,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 200, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 200, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -1335,9 +1335,9 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-c', photoId: 'photo-3', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-c', photoId: 'photo-3', wallId: 'w1', xCm: 300, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-c'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -1387,8 +1387,8 @@ describe('App', () => {
       ],
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 300, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a', 'pl-b'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -1419,7 +1419,7 @@ describe('App', () => {
         photos: [{ id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1 }],
         walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
         placements: [
-          { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+          { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
         ],
         ui: {
           activeWallId: 'w1',
@@ -1498,7 +1498,7 @@ describe('App', () => {
               wallId: 'imp-wall',
               xCm: 200,
               yCm: 150,
-              longEdgeCm: 42,
+              size: { mode: 'aspect' as const, longEdgeCm: 42 },
             },
           ],
           ui: {
@@ -1623,7 +1623,7 @@ describe('App', () => {
             wallId: 'old-wall',
             xCm: 100,
             yCm: 100,
-            longEdgeCm: 42,
+            size: { mode: 'aspect' as const, longEdgeCm: 42 },
           },
         ],
         ui: {
@@ -1649,7 +1649,7 @@ describe('App', () => {
               wallId: 'imp-wall',
               xCm: 200,
               yCm: 150,
-              longEdgeCm: 42,
+              size: { mode: 'aspect' as const, longEdgeCm: 42 },
             },
           ],
           ui: {
@@ -1803,7 +1803,7 @@ describe('App', () => {
             wallId: 'w1',
             xCm: 100,
             yCm: 100,
-            longEdgeCm: 42,
+            size: { mode: 'aspect' as const, longEdgeCm: 42 },
           },
         ],
         ui: {
@@ -2050,11 +2050,11 @@ describe('App', () => {
       walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
       placements: [
         // longEdgeCm 20 → 20cm square. Centered at (50,50) → spans [40,60].
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 50, yCm: 50, longEdgeCm: 20 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 50, yCm: 50, size: { mode: 'aspect' as const, longEdgeCm: 20 } },
         // Centered at (200,50) → spans [190,210].
-        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 50, longEdgeCm: 20 },
+        { id: 'pl-b', photoId: 'photo-2', wallId: 'w1', xCm: 200, yCm: 50, size: { mode: 'aspect' as const, longEdgeCm: 20 } },
         // Parked in the left margin at (-30,150) → spans [-40,-20].
-        { id: 'pl-margin', photoId: 'photo-3', wallId: 'w1', xCm: -30, yCm: 150, longEdgeCm: 20 },
+        { id: 'pl-margin', photoId: 'photo-3', wallId: 'w1', xCm: -30, yCm: 150, size: { mode: 'aspect' as const, longEdgeCm: 20 } },
       ],
       ui: {
         activeWallId: 'w1',
@@ -2325,8 +2325,8 @@ describe('App', () => {
         { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
       ],
       placements: [
-        { id: 'pl-a', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 30 },
-        { id: 'pl-b', photoId: 'ph-b', wallId: 'w1', xCm: 200, yCm: 100, longEdgeCm: 40 },
+        { id: 'pl-a', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
+        { id: 'pl-b', photoId: 'ph-b', wallId: 'w1', xCm: 200, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
       ],
       ui: {
         activeWallId: 'w1',
@@ -2671,7 +2671,7 @@ describe('App', () => {
         { id: 'w2', name: 'South Wall', widthCm: 500, heightCm: 300 },
       ],
       placements: [
-        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-a', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-a'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -2692,5 +2692,157 @@ describe('App', () => {
       expect(screen.queryByTestId('placement-inspector')).not.toBeInTheDocument(),
     )
     expect(screen.queryByTestId('group-inspector')).not.toBeInTheDocument()
+  })
+
+  describe('aspect vs crop sizing', () => {
+    it('toggles a placement from aspect to crop, locking the rectangle and rendering object-fit: cover', async () => {
+      const user = userEvent.setup()
+      const seeded = seededWithSinglePlacement(['pl-1'])
+      const blobStore = createMemoryBlobStore()
+      await blobStore.save('b1', new Blob(['x'], { type: 'image/jpeg' }))
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={blobStore}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const placement = await screen.findByTestId('placement-pl-1')
+      expect(placement.getAttribute('data-size-mode')).toBe('aspect')
+      // Aspect 1.5 photo with longEdge 42 → 42×28
+      expect(Number(placement.getAttribute('data-width-cm'))).toBeCloseTo(42)
+      expect(Number(placement.getAttribute('data-height-cm'))).toBeCloseTo(28)
+
+      // The img in aspect mode does NOT use object-fit: cover (no crop).
+      const aspectImg = await within(placement).findByAltText('a.jpg')
+      expect(aspectImg.style.objectFit).toBe('fill')
+
+      // Switch to crop mode.
+      await user.click(screen.getByTestId('size-mode-crop'))
+
+      await waitFor(() => {
+        const p = screen.getByTestId('placement-pl-1')
+        expect(p.getAttribute('data-size-mode')).toBe('crop')
+        // Crop initialized from the resolved aspect rectangle.
+        expect(Number(p.getAttribute('data-width-cm'))).toBeCloseTo(42)
+        expect(Number(p.getAttribute('data-height-cm'))).toBeCloseTo(28)
+      })
+
+      // The img now uses object-fit: cover when in crop mode.
+      await waitFor(() => {
+        const cropImg = within(screen.getByTestId('placement-pl-1')).getByAltText(
+          'a.jpg',
+        )
+        expect(cropImg.style.objectFit).toBe('cover')
+      })
+    })
+
+    it('swaps the crop rectangle orientation via the swap button', async () => {
+      const user = userEvent.setup()
+      const seeded = {
+        photos: [
+          { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+        ],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [
+          {
+            id: 'pl-1',
+            photoId: 'photo-1',
+            wallId: 'w1',
+            xCm: 100,
+            yCm: 100,
+            size: { mode: 'crop' as const, widthCm: 42, heightCm: 29.7 },
+          },
+        ],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: ['pl-1'],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const placement = await screen.findByTestId('placement-pl-1')
+      expect(Number(placement.getAttribute('data-width-cm'))).toBeCloseTo(42)
+      expect(Number(placement.getAttribute('data-height-cm'))).toBeCloseTo(29.7)
+
+      await user.click(screen.getByTestId('swap-crop-orientation'))
+
+      await waitFor(() => {
+        const p = screen.getByTestId('placement-pl-1')
+        expect(Number(p.getAttribute('data-width-cm'))).toBeCloseTo(29.7)
+        expect(Number(p.getAttribute('data-height-cm'))).toBeCloseTo(42)
+      })
+    })
+
+    it('does not show the swap control when the placement is in aspect mode', async () => {
+      const seeded = seededWithSinglePlacement(['pl-1'])
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-1')
+      expect(screen.queryByTestId('swap-crop-orientation')).not.toBeInTheDocument()
+    })
+
+    it('preset on a crop placement gives a rectangle whose orientation follows the photo', async () => {
+      const user = userEvent.setup()
+      const seeded = {
+        photos: [
+          { id: 'photo-1', filename: 'a.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+        ],
+        walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+        placements: [
+          {
+            id: 'pl-1',
+            photoId: 'photo-1',
+            wallId: 'w1',
+            xCm: 100,
+            yCm: 100,
+            size: { mode: 'crop' as const, widthCm: 20, heightCm: 20 },
+          },
+        ],
+        ui: {
+          activeWallId: 'w1',
+          selectedPlacementIds: ['pl-1'],
+          rulerEnabled: true,
+          silhouetteEnabled: true,
+        },
+      }
+      render(
+        <App
+          port={createMemoryStatePort(seeded)}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      await screen.findByTestId('placement-pl-1')
+      // Apply A3 preset → 42×28 on the 1.5 landscape photo.
+      await user.click(screen.getByRole('button', { name: 'A3' }))
+
+      await waitFor(() => {
+        const p = screen.getByTestId('placement-pl-1')
+        expect(p.getAttribute('data-size-mode')).toBe('crop')
+        expect(Number(p.getAttribute('data-width-cm'))).toBeCloseTo(42)
+        expect(Number(p.getAttribute('data-height-cm'))).toBeCloseTo(28)
+      })
+    })
   })
 })

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Wall, Placement, Photo } from '../state/types'
+import type { Placement, PlacementSize, Photo, Wall } from '../state/types'
 import type { BlobStore } from '../storage/blobStore'
 import { computeFitScale } from '../geometry/scale'
-import { computeSizeFromLongEdge } from '../geometry/sizing'
+import { resolvePlacementSize } from '../geometry/sizing'
 import {
   computeMarqueeHits,
   normalizeMarqueeRect,
@@ -31,7 +31,7 @@ type WallStageProps = {
   onSetSelection: (ids: string[]) => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
   onMoveSelection: (dxCm: number, dyCm: number) => void
-  onResizePlacement: (id: string, longEdgeCm: number) => void
+  onResizePlacement: (id: string, size: PlacementSize) => void
   /** Right-click on a placement. The parent decides what menu to show. */
   onContextMenuPlacement?: (id: string, clientX: number, clientY: number) => void
   /** Right-click on the empty stage background (not on a placement). */
@@ -61,7 +61,7 @@ function buildPlacementRects(
   for (const p of placements) {
     const photo = photos.find((ph) => ph.id === p.photoId)
     if (!photo) continue
-    const size = computeSizeFromLongEdge(p.longEdgeCm, photo.aspectRatio)
+    const size = resolvePlacementSize(p.size, photo.aspectRatio)
     rects.push({
       id: p.id,
       centerXCm: p.xCm,

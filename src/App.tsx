@@ -254,7 +254,7 @@ export default function App({
       wallId: wall.id,
       xCm: pos.xCm,
       yCm: pos.yCm,
-      longEdgeCm: pos.longEdgeCm,
+      size: cb.entries[i].size,
     }))
     if (items.length === 0) return
     dispatch({ type: 'pastePlacements', items })
@@ -511,11 +511,17 @@ export default function App({
             key={soleSelectedPlacement.id}
             placement={soleSelectedPlacement}
             photo={soleSelectedPhoto}
-            onResize={(longEdgeCm) =>
+            onSetSize={(size) =>
               dispatch({
-                type: 'resizePlacement',
+                type: 'setPlacementSize',
                 id: soleSelectedPlacement.id,
-                longEdgeCm,
+                size,
+              })
+            }
+            onSwapCropOrientation={() =>
+              dispatch({
+                type: 'swapPlacementCropOrientation',
+                id: soleSelectedPlacement.id,
               })
             }
             onDelete={() => dispatch({ type: 'deleteSelection' })}
@@ -566,8 +572,8 @@ export default function App({
           onMoveSelection={(dxCm, dyCm) =>
             dispatch({ type: 'moveSelection', dxCm, dyCm })
           }
-          onResizePlacement={(id, longEdgeCm) =>
-            dispatch({ type: 'resizePlacement', id, longEdgeCm })
+          onResizePlacement={(id, size) =>
+            dispatch({ type: 'setPlacementSize', id, size })
           }
           onContextMenuPlacement={(_id, clientX, clientY) =>
             setContextMenu({ kind: 'placement', xPx: clientX, yPx: clientY })

@@ -6,7 +6,6 @@ const row = (overrides: Partial<PrintRow> = {}): PrintRow => ({
   photoId: 'p1',
   filename: 'sunset.jpg',
   blobKey: 'blob-p1',
-  longEdgeCm: 42,
   sizeLabel: 'A3',
   widthCm: 42,
   heightCm: 28,
@@ -49,7 +48,6 @@ describe('printRowsToCsv', () => {
     const csv = printRowsToCsv([
       row({
         sizeLabel: 'Custom',
-        longEdgeCm: 29.7,
         widthCm: 29.7,
         heightCm: 19.8,
       }),

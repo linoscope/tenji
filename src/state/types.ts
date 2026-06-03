@@ -12,6 +12,10 @@ export type Photo = {
   aspectRatio: number
 }
 
+export type PlacementSize =
+  | { mode: 'aspect'; longEdgeCm: number }
+  | { mode: 'crop'; widthCm: number; heightCm: number }
+
 export type Placement = {
   id: string
   photoId: string
@@ -19,7 +23,7 @@ export type Placement = {
   /** Wall-relative cm of the photo's center. Values outside the wall mean "in the margin". */
   xCm: number
   yCm: number
-  longEdgeCm: number
+  size: PlacementSize
 }
 
 export type AppState = {

@@ -1,28 +1,69 @@
-import type { Photo, Placement } from '../state/types'
+import type { Photo, Placement, PlacementSize } from '../state/types'
 import {
   A_SERIES_PRESETS,
-  computeSizeFromLongEdge,
+  resolvePlacementSize,
   resolveSizeLabel,
+  computeSizeFromLongEdge,
 } from '../geometry/sizing'
 
 type PlacementInspectorProps = {
   placement: Placement
   photo: Photo
-  onResize: (longEdgeCm: number) => void
+  onSetSize: (size: PlacementSize) => void
+  onSwapCropOrientation: () => void
   /** Removes this placement instance only. The photo metadata is preserved. */
   onDelete: () => void
 }
 
 const ROUND = (n: number) => Math.round(n * 10) / 10
 
+/** Return a preset's W×H rectangle with orientation following the photo. */
+function presetCropRect(
+  longEdgeCm: number,
+  aspectRatio: number,
+): { widthCm: number; heightCm: number } {
+  const s = computeSizeFromLongEdge(longEdgeCm, aspectRatio)
+  return { widthCm: s.widthCm, heightCm: s.heightCm }
+}
+
 export default function PlacementInspector({
   placement,
   photo,
-  onResize,
+  onSetSize,
+  onSwapCropOrientation,
   onDelete,
 }: PlacementInspectorProps) {
-  const size = computeSizeFromLongEdge(placement.longEdgeCm, photo.aspectRatio)
-  const label = resolveSizeLabel(placement.longEdgeCm)
+  const mode = placement.size.mode
+  const resolved = resolvePlacementSize(placement.size, photo.aspectRatio)
+  const label =
+    mode === 'aspect'
+      ? resolveSizeLabel(placement.size.longEdgeCm)
+      : presetLabelForCrop(placement.size.widthCm, placement.size.heightCm)
+
+  const onAspectClick = () => {
+    if (mode === 'aspect') return
+    // Switch to aspect mode using the placement's current long edge.
+    const longEdgeCm = Math.max(placement.size.widthCm, placement.size.heightCm)
+    onSetSize({ mode: 'aspect', longEdgeCm })
+  }
+  const onCropClick = () => {
+    if (mode === 'crop') return
+    // Switch to crop mode by promoting the current resolved rectangle.
+    onSetSize({
+      mode: 'crop',
+      widthCm: resolved.widthCm,
+      heightCm: resolved.heightCm,
+    })
+  }
+
+  const applyPreset = (longEdgeCm: number) => {
+    if (mode === 'aspect') {
+      onSetSize({ mode: 'aspect', longEdgeCm })
+    } else {
+      const rect = presetCropRect(longEdgeCm, photo.aspectRatio)
+      onSetSize({ mode: 'crop', widthCm: rect.widthCm, heightCm: rect.heightCm })
+    }
+  }
 
   return (
     <section
@@ -38,7 +79,31 @@ export default function PlacementInspector({
     >
       <strong style={{ fontSize: 12 }}>Selected photo</strong>
       <div style={{ color: '#444' }}>
-        {label} — {ROUND(size.widthCm)} × {ROUND(size.heightCm)} cm
+        {label} — {ROUND(resolved.widthCm)} × {ROUND(resolved.heightCm)} cm
+      </div>
+      <div
+        role="group"
+        aria-label="Sizing mode"
+        style={{ display: 'flex', gap: 4 }}
+      >
+        <button
+          type="button"
+          aria-pressed={mode === 'aspect'}
+          data-testid="size-mode-aspect"
+          onClick={onAspectClick}
+          style={modeButtonStyle(mode === 'aspect')}
+        >
+          Aspect
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === 'crop'}
+          data-testid="size-mode-crop"
+          onClick={onCropClick}
+          style={modeButtonStyle(mode === 'crop')}
+        >
+          Crop
+        </button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {A_SERIES_PRESETS.map((preset) => {
@@ -47,7 +112,7 @@ export default function PlacementInspector({
             <button
               key={preset.label}
               type="button"
-              onClick={() => onResize(preset.longEdgeCm)}
+              onClick={() => applyPreset(preset.longEdgeCm)}
               style={{
                 padding: '4px 8px',
                 borderRadius: 4,
@@ -62,19 +127,79 @@ export default function PlacementInspector({
           )
         })}
       </div>
-      <label style={{ display: 'flex', flexDirection: 'column' }}>
-        Long edge (cm)
-        <input
-          type="number"
-          min={1}
-          step={0.1}
-          value={ROUND(placement.longEdgeCm)}
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            if (Number.isFinite(n) && n > 0) onResize(n)
-          }}
-        />
-      </label>
+      {mode === 'aspect' ? (
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          Long edge (cm)
+          <input
+            type="number"
+            min={1}
+            step={0.1}
+            value={ROUND(placement.size.longEdgeCm)}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n) && n > 0)
+                onSetSize({ mode: 'aspect', longEdgeCm: n })
+            }}
+          />
+        </label>
+      ) : (
+        <>
+          <label style={{ display: 'flex', flexDirection: 'column' }}>
+            Width (cm)
+            <input
+              type="number"
+              min={1}
+              step={0.1}
+              value={ROUND(placement.size.widthCm)}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n) && n > 0)
+                  onSetSize({
+                    mode: 'crop',
+                    widthCm: n,
+                    heightCm: placement.size.mode === 'crop'
+                      ? placement.size.heightCm
+                      : resolved.heightCm,
+                  })
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column' }}>
+            Height (cm)
+            <input
+              type="number"
+              min={1}
+              step={0.1}
+              value={ROUND(placement.size.heightCm)}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n) && n > 0)
+                  onSetSize({
+                    mode: 'crop',
+                    widthCm: placement.size.mode === 'crop'
+                      ? placement.size.widthCm
+                      : resolved.widthCm,
+                    heightCm: n,
+                  })
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            data-testid="swap-crop-orientation"
+            onClick={onSwapCropOrientation}
+            style={{
+              padding: '4px 8px',
+              borderRadius: 4,
+              border: '1px solid #c0c0c0',
+              background: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Swap W↔H
+          </button>
+        </>
+      )}
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
         <button
           type="button"
@@ -94,4 +219,25 @@ export default function PlacementInspector({
       </div>
     </section>
   )
+}
+
+function modeButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    flex: 1,
+    padding: '4px 8px',
+    borderRadius: 4,
+    border: '1px solid #c0c0c0',
+    background: active ? '#e6efff' : '#fff',
+    fontWeight: active ? 600 : 400,
+    cursor: 'pointer',
+  }
+}
+
+/**
+ * For a crop rectangle, the preset label reflects the rectangle's *long edge*.
+ * E.g. a 42×29.7 (or 29.7×42) crop is "A3".
+ */
+function presetLabelForCrop(widthCm: number, heightCm: number): string {
+  const longEdge = Math.max(widthCm, heightCm)
+  return resolveSizeLabel(longEdge)
 }

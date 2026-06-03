@@ -15,9 +15,11 @@
 /** Same-wall paste offsets every copy by this many cm so they don't overlap exactly. */
 export const SAME_WALL_PASTE_OFFSET_CM = 8
 
+import type { PlacementSize } from '../state/types'
+
 export type ClipboardEntry = {
   photoId: string
-  longEdgeCm: number
+  size: PlacementSize
   /** x offset from the cluster's centroid at copy time. */
   dxCm: number
   /** y offset from the cluster's centroid at copy time. */
@@ -30,7 +32,7 @@ export type ClipboardSource = {
   wallId: string
   xCm: number
   yCm: number
-  longEdgeCm: number
+  size: PlacementSize
 }
 
 /** Compute the descriptor list + the cluster's centroid coordinates. */
@@ -41,7 +43,7 @@ export function buildClipboardEntries(
   const centroid = computeCentroid(sources)
   return sources.map((s) => ({
     photoId: s.photoId,
-    longEdgeCm: s.longEdgeCm,
+    size: s.size,
     dxCm: s.xCm - centroid.xCm,
     dyCm: s.yCm - centroid.yCm,
   }))
@@ -73,7 +75,7 @@ export type PastePositionsInput = {
 export type PastePosition = {
   xCm: number
   yCm: number
-  longEdgeCm: number
+  size: PlacementSize
 }
 
 /**
@@ -135,7 +137,7 @@ export function computePastePositions({
   return entries.map((e) => ({
     xCm: anchorX + e.dxCm,
     yCm: anchorY + e.dyCm,
-    longEdgeCm: e.longEdgeCm,
+    size: e.size,
   }))
 }
 

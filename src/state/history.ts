@@ -113,8 +113,13 @@ function classify(
       return { kind: 'document', mergeKey: `movePlacement:${action.id}` }
     case 'moveSelection':
       return { kind: 'document', mergeKey: 'moveSelection' }
-    case 'resizePlacement':
-      return { kind: 'document', mergeKey: `resizePlacement:${action.id}` }
+    case 'setPlacementSize':
+      return { kind: 'document', mergeKey: `setPlacementSize:${action.id}` }
+    case 'swapPlacementCropOrientation':
+      return {
+        kind: 'document',
+        mergeKey: `swapPlacementCropOrientation:${action.id}`,
+      }
     case 'deleteSelection':
       return { kind: 'document', mergeKey: 'deleteSelection' }
   }
