@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   A_SERIES_PRESETS,
+  applySizeChoice,
   computeSizeFromLongEdge,
   resolvePlacementSize,
   resolveSizeLabel,
@@ -116,5 +117,75 @@ describe('resolvePlacementSize', () => {
     )
 
     expect(result.orientation).toBe('square')
+  })
+})
+
+describe('applySizeChoice', () => {
+  it('aspect placement + preset → sets long edge, keeps aspect mode', () => {
+    const result = applySizeChoice(
+      { mode: 'aspect', longEdgeCm: 21 },
+      1.5,
+      { kind: 'preset', longEdgeCm: 42 },
+    )
+    expect(result).toEqual({ mode: 'aspect', longEdgeCm: 42 })
+  })
+
+  it('aspect placement + custom long edge → sets long edge, keeps aspect mode', () => {
+    const result = applySizeChoice(
+      { mode: 'aspect', longEdgeCm: 21 },
+      1.5,
+      { kind: 'custom', longEdgeCm: 35.5 },
+    )
+    expect(result).toEqual({ mode: 'aspect', longEdgeCm: 35.5 })
+  })
+
+  it('crop placement + preset on a landscape photo → exact paper rect oriented landscape', () => {
+    const result = applySizeChoice(
+      { mode: 'crop', widthCm: 20, heightCm: 20 },
+      1.5,
+      { kind: 'preset', longEdgeCm: 42 },
+    )
+    expect(result).toEqual({ mode: 'crop', widthCm: 42, heightCm: 28 })
+  })
+
+  it('crop placement + preset on a portrait photo → exact paper rect oriented portrait', () => {
+    const result = applySizeChoice(
+      { mode: 'crop', widthCm: 20, heightCm: 20 },
+      2 / 3,
+      { kind: 'preset', longEdgeCm: 42 },
+    )
+    expect(result.mode).toBe('crop')
+    if (result.mode !== 'crop') throw new Error('expected crop')
+    expect(result.widthCm).toBeCloseTo(28)
+    expect(result.heightCm).toBeCloseTo(42)
+  })
+
+  it('crop placement + custom → scales crop rectangle to the new long edge, preserving W:H', () => {
+    // Source crop is 30×20 (landscape, ratio 3:2). Target long edge 60 → 60×40.
+    const result = applySizeChoice(
+      { mode: 'crop', widthCm: 30, heightCm: 20 },
+      1.5,
+      { kind: 'custom', longEdgeCm: 60 },
+    )
+    expect(result).toEqual({ mode: 'crop', widthCm: 60, heightCm: 40 })
+  })
+
+  it('crop placement + custom on a portrait rectangle → keeps portrait orientation', () => {
+    // Source crop is 20×30 (portrait). Target long edge 60 → 40×60.
+    const result = applySizeChoice(
+      { mode: 'crop', widthCm: 20, heightCm: 30 },
+      1.5, // landscape photo, but crop orientation rules
+      { kind: 'custom', longEdgeCm: 60 },
+    )
+    expect(result).toEqual({ mode: 'crop', widthCm: 40, heightCm: 60 })
+  })
+
+  it('crop placement + custom on a square rectangle → keeps square (both edges equal target)', () => {
+    const result = applySizeChoice(
+      { mode: 'crop', widthCm: 25, heightCm: 25 },
+      1.5,
+      { kind: 'custom', longEdgeCm: 40 },
+    )
+    expect(result).toEqual({ mode: 'crop', widthCm: 40, heightCm: 40 })
   })
 })

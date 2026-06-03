@@ -2883,6 +2883,157 @@ describe('App', () => {
       })
     })
   })
+
+  describe('bulk resize a multi-selection', () => {
+    const seededMixedSelection = () => ({
+      photos: [
+        { id: 'photo-land', filename: 'l.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+        { id: 'photo-port', filename: 'p.jpg', blobKey: 'b2', aspectRatio: 2 / 3 },
+      ],
+      walls: [{ id: 'w1', name: 'North Wall', widthCm: 500, heightCm: 300 }],
+      placements: [
+        // aspect-mode placement
+        {
+          id: 'pl-aspect',
+          photoId: 'photo-land',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 100,
+          size: { mode: 'aspect' as const, longEdgeCm: 21 },
+        },
+        // crop-mode placement on a portrait photo
+        {
+          id: 'pl-crop',
+          photoId: 'photo-port',
+          wallId: 'w1',
+          xCm: 300,
+          yCm: 100,
+          size: { mode: 'crop' as const, widthCm: 20, heightCm: 30 },
+        },
+      ],
+      ui: {
+        activeWallId: 'w1',
+        selectedPlacementIds: ['pl-aspect', 'pl-crop'],
+        rulerEnabled: true,
+        silhouetteEnabled: true,
+      },
+    })
+
+    it('group inspector shows A5–A0 preset buttons and a custom long-edge field when 2+ are selected', async () => {
+      render(
+        <App
+          port={createMemoryStatePort(seededMixedSelection())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const inspector = await screen.findByTestId('group-inspector')
+      for (const label of ['A5', 'A4', 'A3', 'A2', 'A1', 'A0']) {
+        expect(
+          within(inspector).getByRole('button', { name: label }),
+        ).toBeInTheDocument()
+      }
+      expect(
+        within(inspector).getByTestId('group-long-edge'),
+      ).toBeInTheDocument()
+    })
+
+    it('clicking A3 sizes each selected placement per its own mode (aspect→long edge; crop→photo-oriented paper)', async () => {
+      const user = userEvent.setup()
+      render(
+        <App
+          port={createMemoryStatePort(seededMixedSelection())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const inspector = await screen.findByTestId('group-inspector')
+      await user.click(within(inspector).getByRole('button', { name: 'A3' }))
+
+      // Aspect placement: long edge 42, landscape 1.5 photo → 42×28.
+      await waitFor(() => {
+        const aspect = screen.getByTestId('placement-pl-aspect')
+        expect(aspect.getAttribute('data-size-mode')).toBe('aspect')
+        expect(Number(aspect.getAttribute('data-width-cm'))).toBeCloseTo(42)
+        expect(Number(aspect.getAttribute('data-height-cm'))).toBeCloseTo(28)
+      })
+
+      // Crop placement: portrait 2/3 photo, paper A3 → 28×42.
+      const crop = screen.getByTestId('placement-pl-crop')
+      expect(crop.getAttribute('data-size-mode')).toBe('crop')
+      expect(Number(crop.getAttribute('data-width-cm'))).toBeCloseTo(28)
+      expect(Number(crop.getAttribute('data-height-cm'))).toBeCloseTo(42)
+    })
+
+    it('typing a custom long edge applies to every selected placement (scaling crop ratios)', async () => {
+      const user = userEvent.setup()
+      render(
+        <App
+          port={createMemoryStatePort(seededMixedSelection())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const inspector = await screen.findByTestId('group-inspector')
+      const input = within(inspector).getByTestId('group-long-edge')
+      // Replace value with 60 then commit by blur (the field commits on change).
+      await user.clear(input)
+      await user.type(input, '60')
+
+      // Aspect placement: long edge 60, landscape 1.5 photo → 60×40.
+      await waitFor(() => {
+        const aspect = screen.getByTestId('placement-pl-aspect')
+        expect(Number(aspect.getAttribute('data-width-cm'))).toBeCloseTo(60)
+        expect(Number(aspect.getAttribute('data-height-cm'))).toBeCloseTo(40)
+      })
+
+      // Crop placement: 20×30 (portrait, ratio 2:3) scaled to long edge 60 → 40×60.
+      const crop = screen.getByTestId('placement-pl-crop')
+      expect(crop.getAttribute('data-size-mode')).toBe('crop')
+      expect(Number(crop.getAttribute('data-width-cm'))).toBeCloseTo(40)
+      expect(Number(crop.getAttribute('data-height-cm'))).toBeCloseTo(60)
+    })
+
+    it('bulk resize is a single undo step that restores all prior sizes', async () => {
+      const user = userEvent.setup()
+      render(
+        <App
+          port={createMemoryStatePort(seededMixedSelection())}
+          blobStore={createMemoryBlobStore()}
+          createId={() => 'unused'}
+          imageOps={fakeImageOps}
+        />,
+      )
+
+      const inspector = await screen.findByTestId('group-inspector')
+      await user.click(within(inspector).getByRole('button', { name: 'A3' }))
+
+      // Wait for both to be resized.
+      await waitFor(() => {
+        const aspect = screen.getByTestId('placement-pl-aspect')
+        expect(Number(aspect.getAttribute('data-width-cm'))).toBeCloseTo(42)
+      })
+
+      // ⌘Z → both go back to their original sizes in one step.
+      await user.keyboard('{Meta>}z{/Meta}')
+
+      await waitFor(() => {
+        const aspect = screen.getByTestId('placement-pl-aspect')
+        // 1.5 landscape, long edge 21 → 21×14.
+        expect(Number(aspect.getAttribute('data-width-cm'))).toBeCloseTo(21)
+        expect(Number(aspect.getAttribute('data-height-cm'))).toBeCloseTo(14)
+      })
+      const crop = screen.getByTestId('placement-pl-crop')
+      expect(Number(crop.getAttribute('data-width-cm'))).toBeCloseTo(20)
+      expect(Number(crop.getAttribute('data-height-cm'))).toBeCloseTo(30)
+    })
+  })
 })
 
 describe('Supabase share-by-link', () => {

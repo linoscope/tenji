@@ -484,6 +484,145 @@ describe('swapPlacementCropOrientation', () => {
   })
 })
 
+describe('resizeSelection', () => {
+  const seededMixed = () => ({
+    ...initialState,
+    photos: [
+      { id: 'photo-land', filename: 'land.jpg', blobKey: 'b1', aspectRatio: 1.5 },
+      { id: 'photo-port', filename: 'port.jpg', blobKey: 'b2', aspectRatio: 2 / 3 },
+      { id: 'photo-sq', filename: 'sq.jpg', blobKey: 'b3', aspectRatio: 1 },
+    ],
+    walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+    placements: [
+      // aspect-mode landscape photo
+      {
+        id: 'pl-aspect',
+        photoId: 'photo-land',
+        wallId: 'w1',
+        xCm: 100,
+        yCm: 80,
+        size: { mode: 'aspect' as const, longEdgeCm: 21 },
+      },
+      // crop-mode placement (landscape rect, on a portrait photo)
+      {
+        id: 'pl-crop',
+        photoId: 'photo-port',
+        wallId: 'w1',
+        xCm: 200,
+        yCm: 80,
+        size: { mode: 'crop' as const, widthCm: 30, heightCm: 20 },
+      },
+      // not in selection — must stay untouched
+      {
+        id: 'pl-other',
+        photoId: 'photo-sq',
+        wallId: 'w1',
+        xCm: 300,
+        yCm: 80,
+        size: { mode: 'aspect' as const, longEdgeCm: 21 },
+      },
+    ],
+    ui: {
+      activeWallId: 'w1',
+      selectedPlacementIds: ['pl-aspect', 'pl-crop'],
+      rulerEnabled: true,
+      silhouetteEnabled: true,
+    },
+  })
+
+  it('applies a preset to every id in the selection, honoring per-placement mode', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: ['pl-aspect', 'pl-crop'],
+      choice: { kind: 'preset', longEdgeCm: 42 },
+    })
+
+    // Aspect placement: long edge set to 42, still aspect mode.
+    const aspect = after.placements.find((p) => p.id === 'pl-aspect')!
+    expect(aspect.size).toEqual({ mode: 'aspect' as const, longEdgeCm: 42 })
+
+    // Crop placement: paper rect oriented to the photo (portrait, 2/3 ratio) → 28×42.
+    const crop = after.placements.find((p) => p.id === 'pl-crop')!
+    expect(crop.size.mode).toBe('crop')
+    if (crop.size.mode !== 'crop') throw new Error('expected crop')
+    expect(crop.size.widthCm).toBeCloseTo(28)
+    expect(crop.size.heightCm).toBeCloseTo(42)
+  })
+
+  it('applies a custom long edge to every id, scaling crop rectangles by ratio', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: ['pl-aspect', 'pl-crop'],
+      choice: { kind: 'custom', longEdgeCm: 60 },
+    })
+
+    // Aspect placement: long edge set to 60.
+    const aspect = after.placements.find((p) => p.id === 'pl-aspect')!
+    expect(aspect.size).toEqual({ mode: 'aspect' as const, longEdgeCm: 60 })
+
+    // Crop placement: 30×20 (landscape) scaled so long edge = 60 → 60×40.
+    const crop = after.placements.find((p) => p.id === 'pl-crop')!
+    expect(crop.size).toEqual({
+      mode: 'crop' as const,
+      widthCm: 60,
+      heightCm: 40,
+    })
+  })
+
+  it('leaves placements not in `ids` untouched', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: ['pl-aspect', 'pl-crop'],
+      choice: { kind: 'preset', longEdgeCm: 84.1 },
+    })
+
+    const other = after.placements.find((p) => p.id === 'pl-other')!
+    expect(other.size).toEqual({ mode: 'aspect' as const, longEdgeCm: 21 })
+  })
+
+  it('never changes a placement’s aspect↔crop mode', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: ['pl-aspect', 'pl-crop'],
+      choice: { kind: 'preset', longEdgeCm: 42 },
+    })
+
+    expect(after.placements.find((p) => p.id === 'pl-aspect')!.size.mode).toBe(
+      'aspect',
+    )
+    expect(after.placements.find((p) => p.id === 'pl-crop')!.size.mode).toBe(
+      'crop',
+    )
+  })
+
+  it('is a no-op when ids is empty', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: [],
+      choice: { kind: 'preset', longEdgeCm: 42 },
+    })
+
+    expect(after).toBe(seeded)
+  })
+
+  it('skips ids that do not match any placement', () => {
+    const seeded = seededMixed()
+    const after = appReducer(seeded, {
+      type: 'resizeSelection',
+      ids: ['nonexistent'],
+      choice: { kind: 'preset', longEdgeCm: 42 },
+    })
+
+    // No placement should change.
+    expect(after.placements).toEqual(seeded.placements)
+  })
+})
+
 describe('migratePlacementSize', () => {
   it('hydrate migrates legacy placements with longEdgeCm to aspect mode', () => {
     const legacy = {

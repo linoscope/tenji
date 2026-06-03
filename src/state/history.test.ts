@@ -347,6 +347,73 @@ describe('history: depth cap', () => {
   })
 })
 
+describe('history: resizeSelection is one undo step', () => {
+  it('undo restores all prior sizes in a single step (mixed-mode selection)', () => {
+    // Seed with one aspect and one crop placement, both selected.
+    const base = appReducer(initialState, {
+      type: 'createWall',
+      id: 'w1',
+      name: 'Wall 1',
+      widthCm: 400,
+      heightCm: 300,
+    })
+    const seeded: AppState = {
+      ...base,
+      photos: [
+        { id: 'ph-land', filename: 'l.jpg', blobKey: 'k1', aspectRatio: 1.5 },
+        { id: 'ph-port', filename: 'p.jpg', blobKey: 'k2', aspectRatio: 2 / 3 },
+      ],
+      placements: [
+        {
+          id: 'pl-aspect',
+          photoId: 'ph-land',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          size: { mode: 'aspect', longEdgeCm: 21 },
+        },
+        {
+          id: 'pl-crop',
+          photoId: 'ph-port',
+          wallId: 'w1',
+          xCm: 200,
+          yCm: 80,
+          size: { mode: 'crop', widthCm: 20, heightCm: 30 },
+        },
+      ],
+      ui: {
+        ...base.ui,
+        selectedPlacementIds: ['pl-aspect', 'pl-crop'],
+      },
+    }
+    const h0 = createHistoryState(seeded)
+    const now = clockFrom([1000, 2000])
+
+    const h1 = historyReducer(
+      h0,
+      {
+        type: 'resizeSelection',
+        ids: ['pl-aspect', 'pl-crop'],
+        choice: { kind: 'preset', longEdgeCm: 42 },
+      },
+      now,
+    )
+    expect(h1.past).toHaveLength(1)
+    const aspectAfter = h1.present.placements.find((p) => p.id === 'pl-aspect')!
+    expect(aspectAfter.size).toEqual({ mode: 'aspect', longEdgeCm: 42 })
+    const cropAfter = h1.present.placements.find((p) => p.id === 'pl-crop')!
+    expect(cropAfter.size.mode).toBe('crop')
+
+    // Single undo restores BOTH prior sizes.
+    const h2 = historyReducer(h1, { type: 'undo' }, now)
+    expect(h2.past).toHaveLength(0)
+    const aspectBack = h2.present.placements.find((p) => p.id === 'pl-aspect')!
+    expect(aspectBack.size).toEqual({ mode: 'aspect', longEdgeCm: 21 })
+    const cropBack = h2.present.placements.find((p) => p.id === 'pl-crop')!
+    expect(cropBack.size).toEqual({ mode: 'crop', widthCm: 20, heightCm: 30 })
+  })
+})
+
 describe('history: duplicateWall is one undo step', () => {
   it('undo removes both the duplicated wall and its cloned placements in a single step', () => {
     const initial = seededState()

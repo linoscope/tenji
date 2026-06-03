@@ -25,6 +25,7 @@ import PlacementInspector from './ui/PlacementInspector'
 import PrintShop from './ui/PrintShop'
 import ProjectShare from './ui/ProjectShare'
 import { computeMarginTilePositions } from './geometry/marginTiles'
+import { A_SERIES_PRESETS, type SizeChoice } from './geometry/sizing'
 import { DEFAULT_PLACEMENT_LONG_EDGE_CM } from './state/reducer'
 import type { ImportPhotoItem, PastePlacementItem } from './state/reducer'
 import {
@@ -662,6 +663,13 @@ export default function App({
           <GroupInspector
             count={selectionCount}
             onDeleteAll={() => dispatch({ type: 'deleteSelection' })}
+            onResizeSelection={(choice) =>
+              dispatch({
+                type: 'resizeSelection',
+                ids: selectedPlacementIds,
+                choice,
+              })
+            }
           />
         ) : null}
         <PhotoImportButton onImportFiles={importFiles} />
@@ -1092,9 +1100,15 @@ function OverlayControls({
 type GroupInspectorProps = {
   count: number
   onDeleteAll: () => void
+  onResizeSelection: (choice: SizeChoice) => void
 }
 
-function GroupInspector({ count, onDeleteAll }: GroupInspectorProps) {
+function GroupInspector({
+  count,
+  onDeleteAll,
+  onResizeSelection,
+}: GroupInspectorProps) {
+  const [longEdgeText, setLongEdgeText] = useState('')
   return (
     <section
       data-testid="group-inspector"
@@ -1108,6 +1122,44 @@ function GroupInspector({ count, onDeleteAll }: GroupInspectorProps) {
       }}
     >
       <strong style={{ fontSize: 12 }}>{count} selected</strong>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {A_SERIES_PRESETS.map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            onClick={() =>
+              onResizeSelection({ kind: 'preset', longEdgeCm: preset.longEdgeCm })
+            }
+            style={{
+              padding: '4px 8px',
+              borderRadius: 4,
+              border: '1px solid #c0c0c0',
+              background: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      <label style={{ display: 'flex', flexDirection: 'column' }}>
+        Long edge (cm)
+        <input
+          type="number"
+          min={1}
+          step={0.1}
+          data-testid="group-long-edge"
+          value={longEdgeText}
+          onChange={(e) => {
+            const text = e.target.value
+            setLongEdgeText(text)
+            const n = Number(text)
+            if (Number.isFinite(n) && n > 0) {
+              onResizeSelection({ kind: 'custom', longEdgeCm: n })
+            }
+          }}
+        />
+      </label>
       <div style={{ display: 'flex', gap: 4 }}>
         <button
           type="button"
