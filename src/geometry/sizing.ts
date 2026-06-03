@@ -74,3 +74,40 @@ export function resolveSizeLabel(longEdgeCm: number): string {
   )
   return match ? match.label : 'Custom'
 }
+
+/**
+ * A bulk-resize choice — either a paper preset (e.g. A3) or a custom long edge
+ * in cm. Used by both the single-placement inspector and the multi-selection
+ * bulk-resize UI.
+ */
+export type SizeChoice =
+  | { kind: 'preset'; longEdgeCm: number }
+  | { kind: 'custom'; longEdgeCm: number }
+
+/**
+ * Apply a size choice to a placement's current size *without changing its
+ * mode*. Aspect placements always get their long edge set to the chosen value.
+ * Crop placements interpret a preset as the photo-oriented paper rectangle for
+ * that preset, and a custom long edge as "scale the current crop rectangle so
+ * its long edge equals the value, preserving the W:H ratio."
+ */
+export function applySizeChoice(
+  current: PlacementSize,
+  aspectRatio: number,
+  choice: SizeChoice,
+): PlacementSize {
+  if (current.mode === 'aspect') {
+    return { mode: 'aspect', longEdgeCm: choice.longEdgeCm }
+  }
+  if (choice.kind === 'preset') {
+    const rect = computeSizeFromLongEdge(choice.longEdgeCm, aspectRatio)
+    return { mode: 'crop', widthCm: rect.widthCm, heightCm: rect.heightCm }
+  }
+  const longEdge = Math.max(current.widthCm, current.heightCm)
+  const scale = choice.longEdgeCm / longEdge
+  return {
+    mode: 'crop',
+    widthCm: current.widthCm * scale,
+    heightCm: current.heightCm * scale,
+  }
+}

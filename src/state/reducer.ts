@@ -1,3 +1,4 @@
+import { applySizeChoice, type SizeChoice } from '../geometry/sizing'
 import type { AppState, Placement, PlacementSize, Wall } from './types'
 
 export const DEFAULT_WALL_WIDTH_CM = 800
@@ -99,6 +100,7 @@ export type Action =
   | { type: 'moveSelection'; dxCm: number; dyCm: number }
   | { type: 'setPlacementSize'; id: string; size: PlacementSize }
   | { type: 'swapPlacementCropOrientation'; id: string }
+  | { type: 'resizeSelection'; ids: string[]; choice: SizeChoice }
   | { type: 'selectPlacement'; id: string }
   | { type: 'toggleSelectPlacement'; id: string }
   | { type: 'setSelection'; ids: string[] }
@@ -306,6 +308,22 @@ export function appReducer(state: AppState, action: Action): AppState {
           p.id === action.id ? { ...p, size: action.size } : p,
         ),
       }
+    case 'resizeSelection': {
+      if (action.ids.length === 0) return state
+      const ids = new Set(action.ids)
+      const photoById = new Map(state.photos.map((p) => [p.id, p]))
+      let changed = false
+      const placements = state.placements.map((p) => {
+        if (!ids.has(p.id)) return p
+        const photo = photoById.get(p.photoId)
+        if (!photo) return p
+        const nextSize = applySizeChoice(p.size, photo.aspectRatio, action.choice)
+        changed = true
+        return { ...p, size: nextSize }
+      })
+      if (!changed) return state
+      return { ...state, placements }
+    }
     case 'swapPlacementCropOrientation':
       return {
         ...state,

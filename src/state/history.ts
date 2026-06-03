@@ -127,6 +127,19 @@ function classify(
         kind: 'document',
         mergeKey: `swapPlacementCropOrientation:${action.id}`,
       }
+    case 'resizeSelection': {
+      // Unique per dispatch so successive bulk resizes (e.g. clicking A4 then
+      // A3) each get their own undo step.
+      const ids = action.ids.join(',')
+      const choice =
+        action.choice.kind === 'preset'
+          ? `preset:${action.choice.longEdgeCm}`
+          : `custom:${action.choice.longEdgeCm}`
+      return {
+        kind: 'document',
+        mergeKey: `resizeSelection:${ids}:${choice}`,
+      }
+    }
     case 'deleteSelection':
       return { kind: 'document', mergeKey: 'deleteSelection' }
   }
