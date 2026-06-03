@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Base path: '/' locally; the Pages workflow sets BASE_PATH=/tenji/ for the
+  // deployed build so assets resolve under the project-site path.
+  base: process.env.BASE_PATH ?? '/',
   plugins: [react()],
   test: {
     globals: true,
