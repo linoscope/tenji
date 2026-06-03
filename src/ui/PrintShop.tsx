@@ -82,7 +82,7 @@ export default function PrintShop({
           <tbody>
             {rows.map((row) => (
               <PrintRowView
-                key={`${row.photoId}-${row.longEdgeCm}`}
+                key={`${row.photoId}-${row.widthCm}-${row.heightCm}`}
                 row={row}
                 blobStore={blobStore}
               />
@@ -118,7 +118,7 @@ function PrintRowView({
 
   return (
     <tr
-      data-testid={`print-row-${row.photoId}-${row.longEdgeCm}`}
+      data-testid={`print-row-${row.photoId}-${row.widthCm}-${row.heightCm}`}
       style={{ borderTop: '1px solid #eee', verticalAlign: 'middle' }}
     >
       <td style={{ width: 32 }}>

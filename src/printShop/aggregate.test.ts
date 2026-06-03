@@ -29,11 +29,26 @@ const placement = (
   wallId,
   xCm: 0,
   yCm: 0,
-  longEdgeCm,
+  size: { mode: 'aspect', longEdgeCm },
+})
+
+const cropPlacement = (
+  id: string,
+  photoId: string,
+  wallId: string,
+  widthCm: number,
+  heightCm: number,
+): Placement => ({
+  id,
+  photoId,
+  wallId,
+  xCm: 0,
+  yCm: 0,
+  size: { mode: 'crop', widthCm, heightCm },
 })
 
 describe('aggregatePrintRows', () => {
-  it('groups placements by (photoId, longEdgeCm) with a count', () => {
+  it('groups placements by (photoId, resolved W x H) with a count', () => {
     const photos = [photo({ id: 'p1', aspectRatio: 3 / 2 })]
     const walls = [wall('w1', 'North')]
     const placements = [
@@ -46,7 +61,8 @@ describe('aggregatePrintRows', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].count).toBe(2)
     expect(rows[0].photoId).toBe('p1')
-    expect(rows[0].longEdgeCm).toBe(42)
+    expect(rows[0].widthCm).toBeCloseTo(42)
+    expect(rows[0].heightCm).toBeCloseTo(28)
   })
 
   it('separates rows when the same photo is placed at two different sizes', () => {
@@ -60,9 +76,38 @@ describe('aggregatePrintRows', () => {
     const rows = aggregatePrintRows({ photos, placements, walls })
 
     expect(rows).toHaveLength(2)
-    const sizes = rows.map((r) => r.longEdgeCm).sort((a, b) => a - b)
-    expect(sizes).toEqual([29.7, 42])
+    const sizes = rows.map((r) => r.widthCm).sort((a, b) => a - b)
+    expect(sizes[0]).toBeCloseTo(29.7)
+    expect(sizes[1]).toBeCloseTo(42)
     expect(rows.every((r) => r.count === 1)).toBe(true)
+  })
+
+  it('groups aspect and crop placements that resolve to the same W x H', () => {
+    // A 42x28 aspect placement (3:2 photo, A3) groups with an identical crop.
+    const photos = [photo({ id: 'p1', aspectRatio: 3 / 2 })]
+    const walls = [wall('w1', 'North')]
+    const placements = [
+      placement('pl1', 'p1', 'w1', 42),
+      cropPlacement('pl2', 'p1', 'w1', 42, 28),
+    ]
+
+    const rows = aggregatePrintRows({ photos, placements, walls })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].count).toBe(2)
+  })
+
+  it('separates aspect and crop placements that resolve to different W x H', () => {
+    const photos = [photo({ id: 'p1', aspectRatio: 3 / 2 })]
+    const walls = [wall('w1', 'North')]
+    const placements = [
+      placement('pl1', 'p1', 'w1', 42), // 42x28
+      cropPlacement('pl2', 'p1', 'w1', 42, 29.7), // different shape
+    ]
+
+    const rows = aggregatePrintRows({ photos, placements, walls })
+
+    expect(rows).toHaveLength(2)
   })
 
   it('exposes filename, sizeLabel, widthCm, heightCm, and orientation', () => {
@@ -143,7 +188,7 @@ describe('aggregatePrintRows', () => {
       wallId: 'w1',
       xCm: 250,
       yCm: 150,
-      longEdgeCm: 42,
+      size: { mode: 'aspect' as const, longEdgeCm: 42 },
     }
     const inMargin: Placement = {
       id: 'pl-margin',
@@ -151,7 +196,7 @@ describe('aggregatePrintRows', () => {
       wallId: 'w1',
       xCm: 250,
       yCm: 400, // below the wall
-      longEdgeCm: 42,
+      size: { mode: 'aspect', longEdgeCm: 42 },
     }
     const offLeft: Placement = {
       id: 'pl-off-left',
@@ -159,7 +204,7 @@ describe('aggregatePrintRows', () => {
       wallId: 'w1',
       xCm: -10,
       yCm: 150,
-      longEdgeCm: 42,
+      size: { mode: 'aspect' as const, longEdgeCm: 42 },
     }
 
     const rows = aggregatePrintRows({

@@ -8,13 +8,13 @@ import {
 describe('buildClipboardEntries', () => {
   it('captures photoId, longEdgeCm, and per-placement offsets relative to the cluster centroid', () => {
     const entries = buildClipboardEntries([
-      { id: 'pl-1', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 30 },
-      { id: 'pl-2', photoId: 'ph-b', wallId: 'w1', xCm: 200, yCm: 100, longEdgeCm: 40 },
+      { id: 'pl-1', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
+      { id: 'pl-2', photoId: 'ph-b', wallId: 'w1', xCm: 200, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
     ])
     // Centroid of (100,100) and (200,100) is (150,100).
     expect(entries).toEqual([
-      { photoId: 'ph-a', longEdgeCm: 30, dxCm: -50, dyCm: 0 },
-      { photoId: 'ph-b', longEdgeCm: 40, dxCm: 50, dyCm: 0 },
+      { photoId: 'ph-a', size: { mode: 'aspect', longEdgeCm: 30 }, dxCm: -50, dyCm: 0 },
+      { photoId: 'ph-b', size: { mode: 'aspect', longEdgeCm: 40 }, dxCm: 50, dyCm: 0 },
     ])
   })
 
@@ -24,8 +24,8 @@ describe('buildClipboardEntries', () => {
 
   it('preserves input order even when sources are listed unsorted', () => {
     const entries = buildClipboardEntries([
-      { id: 'pl-z', photoId: 'pz', wallId: 'w1', xCm: 300, yCm: 80, longEdgeCm: 20 },
-      { id: 'pl-a', photoId: 'pa', wallId: 'w1', xCm: 100, yCm: 40, longEdgeCm: 20 },
+      { id: 'pl-z', photoId: 'pz', wallId: 'w1', xCm: 300, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 20 } },
+      { id: 'pl-a', photoId: 'pa', wallId: 'w1', xCm: 100, yCm: 40, size: { mode: 'aspect' as const, longEdgeCm: 20 } },
     ])
     expect(entries.map((e) => e.photoId)).toEqual(['pz', 'pa'])
   })
@@ -34,8 +34,8 @@ describe('buildClipboardEntries', () => {
 describe('computePastePositions', () => {
   const wall = { widthCm: 500, heightCm: 300 }
   const entries: ClipboardEntry[] = [
-    { photoId: 'ph-a', longEdgeCm: 30, dxCm: -50, dyCm: 0 },
-    { photoId: 'ph-b', longEdgeCm: 40, dxCm: 50, dyCm: 0 },
+    { photoId: 'ph-a', size: { mode: 'aspect', longEdgeCm: 30 }, dxCm: -50, dyCm: 0 },
+    { photoId: 'ph-b', size: { mode: 'aspect', longEdgeCm: 40 }, dxCm: 50, dyCm: 0 },
   ]
 
   it('cross-wall paste anchors on the originals (sourceCenter), preserving arrangement', () => {
@@ -47,8 +47,8 @@ describe('computePastePositions', () => {
     })
     // Same coordinates as the originals (sourceCenter (150,100) + offsets).
     expect(out).toEqual([
-      { xCm: 100, yCm: 100, longEdgeCm: 30 },
-      { xCm: 200, yCm: 100, longEdgeCm: 40 },
+      { xCm: 100, yCm: 100, size: { mode: 'aspect', longEdgeCm: 30 } },
+      { xCm: 200, yCm: 100, size: { mode: 'aspect', longEdgeCm: 40 } },
     ])
   })
 
@@ -99,7 +99,7 @@ describe('computePastePositions', () => {
   it('respects square-aspect assumed bounds (centers stay inside the wall)', () => {
     // Single entry, anchor in-bounds, should not move.
     const single: ClipboardEntry[] = [
-      { photoId: 'p', longEdgeCm: 20, dxCm: 0, dyCm: 0 },
+      { photoId: 'p', size: { mode: 'aspect', longEdgeCm: 20 }, dxCm: 0, dyCm: 0 },
     ]
     const out = computePastePositions({
       entries: single,
@@ -107,7 +107,7 @@ describe('computePastePositions', () => {
       sameWall: false,
       wall,
     })
-    expect(out).toEqual([{ xCm: 250, yCm: 150, longEdgeCm: 20 }])
+    expect(out).toEqual([{ xCm: 250, yCm: 150, size: { mode: 'aspect', longEdgeCm: 20 } }])
   })
 
   it('returns an empty array when entries is empty', () => {

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
-import type { Wall, Placement, Photo } from '../state/types'
+import type { Wall, Placement, PlacementSize, Photo } from '../state/types'
 import { cmToPx } from '../geometry/scale'
-import { computeSizeFromLongEdge } from '../geometry/sizing'
+import { resolvePlacementSize } from '../geometry/sizing'
 import {
   computeAlignment,
   rectanglesOverlap,
@@ -29,7 +29,7 @@ type WallViewProps = {
   onClearSelection: () => void
   onMovePlacement: (id: string, xCm: number, yCm: number) => void
   onMoveSelection: (dxCm: number, dyCm: number) => void
-  onResizePlacement: (id: string, longEdgeCm: number) => void
+  onResizePlacement: (id: string, size: PlacementSize) => void
   onContextMenuPlacement?: (id: string, clientX: number, clientY: number) => void
 }
 
@@ -48,7 +48,7 @@ function placementToRect(
   centerXCm: number,
   centerYCm: number,
 ): AlignmentRect {
-  const size = computeSizeFromLongEdge(p.longEdgeCm, photo.aspectRatio)
+  const size = resolvePlacementSize(p.size, photo.aspectRatio)
   return {
     id: p.id,
     centerXCm,
@@ -297,7 +297,7 @@ export default function WallView({
               setLiveDrag(null)
             }}
             onMove={(xCm, yCm) => onMovePlacement(p.id, xCm, yCm)}
-            onResize={(longEdgeCm) => onResizePlacement(p.id, longEdgeCm)}
+            onResize={(size) => onResizePlacement(p.id, size)}
           />
         )
       })}

@@ -1,6 +1,6 @@
 import type { Photo, Placement, Wall } from '../state/types'
 import {
-  computeSizeFromLongEdge,
+  resolvePlacementSize,
   resolveSizeLabel,
   type Orientation,
 } from '../geometry/sizing'
@@ -9,7 +9,6 @@ export type PrintRow = {
   photoId: string
   filename: string
   blobKey: string
-  longEdgeCm: number
   sizeLabel: string
   widthCm: number
   heightCm: number
@@ -25,9 +24,11 @@ type AggregateInput = {
   walls: Wall[]
 }
 
+const DIM_KEY = (cm: number) => Math.round(cm * 1000) / 1000
+
 /**
- * Group placements across all walls by (photoId, longEdgeCm). Only
- * placements whose **center is inside the wall bounds** count — margin-
+ * Group placements across all walls by (photoId, resolved widthCm, heightCm).
+ * Only placements whose **center is inside the wall bounds** count — margin-
  * parked placements are excluded. Placements pointing at a missing photo
  * or wall are also excluded.
  */
@@ -43,7 +44,9 @@ export function aggregatePrintRows({
 
   type Accum = {
     photo: Photo
-    longEdgeCm: number
+    widthCm: number
+    heightCm: number
+    orientation: Orientation
     count: number
     wallIds: Set<string>
   }
@@ -62,7 +65,10 @@ export function aggregatePrintRows({
       p.yCm > wall.heightCm
     )
       continue
-    const key = `${p.photoId}__${p.longEdgeCm}`
+    const resolved = resolvePlacementSize(p.size, photo.aspectRatio)
+    const key = `${p.photoId}__${DIM_KEY(resolved.widthCm)}x${DIM_KEY(
+      resolved.heightCm,
+    )}`
     const existing = groups.get(key)
     if (existing) {
       existing.count += 1
@@ -70,7 +76,9 @@ export function aggregatePrintRows({
     } else {
       groups.set(key, {
         photo,
-        longEdgeCm: p.longEdgeCm,
+        widthCm: resolved.widthCm,
+        heightCm: resolved.heightCm,
+        orientation: resolved.orientation,
         count: 1,
         wallIds: new Set([p.wallId]),
       })
@@ -78,7 +86,6 @@ export function aggregatePrintRows({
   }
 
   return [...groups.values()].map((g) => {
-    const size = computeSizeFromLongEdge(g.longEdgeCm, g.photo.aspectRatio)
     const wallNames = [...g.wallIds]
       .filter((id) => wallNameById.has(id))
       .sort(
@@ -87,15 +94,15 @@ export function aggregatePrintRows({
           (wallOrder.get(b) ?? Number.POSITIVE_INFINITY),
       )
       .map((id) => wallNameById.get(id) as string)
+    const longEdge = Math.max(g.widthCm, g.heightCm)
     return {
       photoId: g.photo.id,
       filename: g.photo.filename,
       blobKey: g.photo.blobKey,
-      longEdgeCm: g.longEdgeCm,
-      sizeLabel: resolveSizeLabel(g.longEdgeCm),
-      widthCm: size.widthCm,
-      heightCm: size.heightCm,
-      orientation: size.orientation,
+      sizeLabel: resolveSizeLabel(longEdge),
+      widthCm: g.widthCm,
+      heightCm: g.heightCm,
+      orientation: g.orientation,
       count: g.count,
       wallNames,
     }

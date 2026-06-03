@@ -97,7 +97,7 @@ describe('resizeWall', () => {
           wallId: 'w1',
           xCm: 700,
           yCm: 200,
-          longEdgeCm: 40,
+          size: { mode: 'aspect' as const, longEdgeCm: 40 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -155,7 +155,7 @@ describe('importPhotos', () => {
       wallId: 'w1',
       xCm: 250,
       yCm: 340,
-      longEdgeCm: 42,
+      size: { mode: 'aspect' as const, longEdgeCm: 42 },
     })
     expect(after.placements[1]).toMatchObject({
       photoId: 'p2',
@@ -199,7 +199,7 @@ describe('importPhotos', () => {
         { id: 'p-old', filename: 'old.jpg', blobKey: 'b-old', aspectRatio: 1 },
       ],
       placements: [
-        { id: 'pl-old', photoId: 'p-old', wallId: 'w1', xCm: 100, yCm: 100, longEdgeCm: 42 },
+        { id: 'pl-old', photoId: 'p-old', wallId: 'w1', xCm: 100, yCm: 100, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -249,7 +249,7 @@ describe('movePlacement', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -276,7 +276,7 @@ describe('movePlacement', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
         {
           id: 'pl-2',
@@ -284,7 +284,7 @@ describe('movePlacement', () => {
           wallId: 'w1',
           xCm: 200,
           yCm: 90,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -301,8 +301,8 @@ describe('movePlacement', () => {
   })
 })
 
-describe('resizePlacement', () => {
-  it('updates longEdgeCm of the matching placement', () => {
+describe('setPlacementSize', () => {
+  it('updates size of the matching placement', () => {
     const seeded: ReturnType<typeof appReducer> = {
       ...initialState,
       walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
@@ -313,19 +313,19 @@ describe('resizePlacement', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
-      type: 'resizePlacement',
+      type: 'setPlacementSize',
       id: 'pl-1',
-      longEdgeCm: 59.4,
+      size: { mode: 'aspect' as const, longEdgeCm: 59.4 },
     })
 
-    expect(after.placements[0]).toMatchObject({ longEdgeCm: 59.4 })
+    expect(after.placements[0]).toMatchObject({ size: { mode: 'aspect' as const, longEdgeCm: 59.4 } })
   })
 
   it('leaves other placements unchanged', () => {
@@ -339,7 +339,7 @@ describe('resizePlacement', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
         {
           id: 'pl-2',
@@ -347,19 +347,19 @@ describe('resizePlacement', () => {
           wallId: 'w1',
           xCm: 200,
           yCm: 90,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
-      type: 'resizePlacement',
+      type: 'setPlacementSize',
       id: 'pl-1',
-      longEdgeCm: 21,
+      size: { mode: 'aspect' as const, longEdgeCm: 21 },
     })
 
-    expect(after.placements[1]).toMatchObject({ longEdgeCm: 42 })
+    expect(after.placements[1]).toMatchObject({ size: { mode: 'aspect' as const, longEdgeCm: 42 } })
   })
 
   it('does not change xCm/yCm', () => {
@@ -373,19 +373,138 @@ describe('resizePlacement', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
 
     const after = appReducer(seeded, {
-      type: 'resizePlacement',
+      type: 'setPlacementSize',
       id: 'pl-1',
-      longEdgeCm: 84.1,
+      size: { mode: 'aspect' as const, longEdgeCm: 84.1 },
     })
 
     expect(after.placements[0]).toMatchObject({ xCm: 100, yCm: 80 })
+  })
+
+  it('switches mode to crop with explicit width/height', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'setPlacementSize',
+      id: 'pl-1',
+      size: { mode: 'crop' as const, widthCm: 30, heightCm: 40 },
+    })
+
+    expect(after.placements[0].size).toEqual({ mode: 'crop' as const, widthCm: 30, heightCm: 40 })
+  })
+})
+
+describe('swapPlacementCropOrientation', () => {
+  const cropPlacement = (size: { mode: 'crop'; widthCm: number; heightCm: number }) => ({
+    ...initialState,
+    walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+    placements: [
+      {
+        id: 'pl-1',
+        photoId: 'photo-1',
+        wallId: 'w1',
+        xCm: 100,
+        yCm: 80,
+        size,
+      },
+    ],
+    ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+  })
+
+  it('swaps widthCm and heightCm on a crop placement', () => {
+    const seeded = cropPlacement({ mode: 'crop' as const, widthCm: 42, heightCm: 29.7 })
+
+    const after = appReducer(seeded, {
+      type: 'swapPlacementCropOrientation',
+      id: 'pl-1',
+    })
+
+    expect(after.placements[0].size).toEqual({
+      mode: 'crop' as const,
+      widthCm: 29.7,
+      heightCm: 42,
+    })
+  })
+
+  it('is a no-op for a square crop rectangle', () => {
+    const seeded = cropPlacement({ mode: 'crop' as const, widthCm: 30, heightCm: 30 })
+
+    const after = appReducer(seeded, {
+      type: 'swapPlacementCropOrientation',
+      id: 'pl-1',
+    })
+
+    expect(after.placements[0].size).toEqual({ mode: 'crop' as const, widthCm: 30, heightCm: 30 })
+  })
+
+  it('is a no-op for an aspect placement', () => {
+    const seeded: ReturnType<typeof appReducer> = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-1',
+          photoId: 'photo-1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+    }
+
+    const after = appReducer(seeded, {
+      type: 'swapPlacementCropOrientation',
+      id: 'pl-1',
+    })
+
+    expect(after.placements[0].size).toEqual({ mode: 'aspect' as const, longEdgeCm: 42 })
+  })
+})
+
+describe('migratePlacementSize', () => {
+  it('hydrate migrates legacy placements with longEdgeCm to aspect mode', () => {
+    const legacy = {
+      ...initialState,
+      walls: [{ id: 'w1', name: 'Wall 1', widthCm: 800, heightCm: 250 }],
+      placements: [
+        {
+          id: 'pl-old',
+          photoId: 'p1',
+          wallId: 'w1',
+          xCm: 100,
+          yCm: 80,
+          longEdgeCm: 42,
+        },
+      ],
+      ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
+    } as unknown as Parameters<typeof appReducer>[0]
+
+    const after = appReducer(initialState, { type: 'hydrate', state: legacy })
+
+    expect(after.placements[0].size).toEqual({ mode: 'aspect' as const, longEdgeCm: 42 })
   })
 })
 
@@ -427,7 +546,7 @@ describe('movePlacement (parking)', () => {
           wallId: 'w1',
           xCm: 100,
           yCm: 80,
-          longEdgeCm: 42,
+          size: { mode: 'aspect' as const, longEdgeCm: 42 },
         },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
@@ -456,8 +575,8 @@ describe('deleteSelection (instance-level)', () => {
         { id: 'w2', name: 'Wall 2', widthCm: 500, heightCm: 300 },
       ],
       placements: [
-        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 42 },
-        { id: 'pl-2', photoId: 'photo-1', wallId: 'w2', xCm: 100, yCm: 80, longEdgeCm: 42 },
+        { id: 'pl-1', photoId: 'photo-1', wallId: 'w1', xCm: 100, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+        { id: 'pl-2', photoId: 'photo-1', wallId: 'w2', xCm: 100, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: ['pl-1'], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -490,8 +609,8 @@ describe('deleteWall', () => {
         { id: 'w2', name: 'Wall 2', widthCm: 800, heightCm: 250 },
       ],
       placements: [
-        { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, longEdgeCm: 40 },
-        { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, longEdgeCm: 40 },
+        { id: 'p1', photoId: 'ph1', wallId: 'w1', xCm: 10, yCm: 10, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
+        { id: 'p2', photoId: 'ph2', wallId: 'w2', xCm: 10, yCm: 10, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
       ],
       ui: { activeWallId: 'w1', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
     }
@@ -567,9 +686,9 @@ describe('multi-select', () => {
       { id: 'w2', name: 'W2', widthCm: 800, heightCm: 250 },
     ],
     placements: [
-      { id: 'pl-1', photoId: 'ph-1', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 42 },
-      { id: 'pl-2', photoId: 'ph-2', wallId: 'w1', xCm: 200, yCm: 80, longEdgeCm: 42 },
-      { id: 'pl-3', photoId: 'ph-3', wallId: 'w1', xCm: 300, yCm: 80, longEdgeCm: 42 },
+      { id: 'pl-1', photoId: 'ph-1', wallId: 'w1', xCm: 100, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+      { id: 'pl-2', photoId: 'ph-2', wallId: 'w1', xCm: 200, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
+      { id: 'pl-3', photoId: 'ph-3', wallId: 'w1', xCm: 300, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
     ],
     ui: { activeWallId: 'w1', selectedPlacementIds: selected, rulerEnabled: true, silhouetteEnabled: true },
   })
@@ -653,7 +772,7 @@ describe('pastePlacements', () => {
       { id: 'w2', name: 'W2', widthCm: 800, heightCm: 250 },
     ],
     placements: [
-      { id: 'pl-1', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 30 },
+      { id: 'pl-1', photoId: 'ph-a', wallId: 'w1', xCm: 100, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
     ],
     ui: { activeWallId: 'w2', selectedPlacementIds: [], rulerEnabled: true, silhouetteEnabled: true },
   })
@@ -662,8 +781,8 @@ describe('pastePlacements', () => {
     const after = appReducer(seeded(), {
       type: 'pastePlacements',
       items: [
-        { placementId: 'pl-new-a', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
-        { placementId: 'pl-new-b', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, longEdgeCm: 40 },
+        { placementId: 'pl-new-a', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
+        { placementId: 'pl-new-b', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
       ],
     })
 
@@ -681,14 +800,14 @@ describe('pastePlacements', () => {
       wallId: 'w2',
       xCm: 50,
       yCm: 60,
-      longEdgeCm: 30,
+      size: { mode: 'aspect' as const, longEdgeCm: 30 },
     })
     expect(after.placements[2]).toMatchObject({
       photoId: 'ph-b',
       wallId: 'w2',
       xCm: 150,
       yCm: 60,
-      longEdgeCm: 40,
+      size: { mode: 'aspect' as const, longEdgeCm: 40 },
     })
   })
 
@@ -697,7 +816,7 @@ describe('pastePlacements', () => {
     const after = appReducer(before, {
       type: 'pastePlacements',
       items: [
-        { placementId: 'pl-new', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
+        { placementId: 'pl-new', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
       ],
     })
     expect(after.photos).toBe(before.photos)
@@ -707,8 +826,8 @@ describe('pastePlacements', () => {
     const after = appReducer(seeded(), {
       type: 'pastePlacements',
       items: [
-        { placementId: 'pl-x', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, longEdgeCm: 30 },
-        { placementId: 'pl-y', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, longEdgeCm: 40 },
+        { placementId: 'pl-x', photoId: 'ph-a', wallId: 'w2', xCm: 50, yCm: 60, size: { mode: 'aspect' as const, longEdgeCm: 30 } },
+        { placementId: 'pl-y', photoId: 'ph-b', wallId: 'w2', xCm: 150, yCm: 60, size: { mode: 'aspect' as const, longEdgeCm: 40 } },
       ],
     })
     expect(after.ui.selectedPlacementIds).toEqual(['pl-x', 'pl-y'])

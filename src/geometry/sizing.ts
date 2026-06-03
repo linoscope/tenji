@@ -1,9 +1,31 @@
+import type { PlacementSize } from '../state/types'
+
 export type Orientation = 'portrait' | 'landscape' | 'square'
 
 export type PhotoSize = {
   widthCm: number
   heightCm: number
   orientation: Orientation
+}
+
+/**
+ * Resolve a placement's on-wall rectangle from its sizing mode plus the
+ * source photo's aspect ratio.
+ *
+ * - Aspect: long edge along the photo's longer dimension, other follows.
+ * - Crop: pass-through W×H; orientation follows whichever side is longer.
+ */
+export function resolvePlacementSize(
+  size: PlacementSize,
+  aspectRatio: number,
+): PhotoSize {
+  if (size.mode === 'aspect') {
+    return computeSizeFromLongEdge(size.longEdgeCm, aspectRatio)
+  }
+  const { widthCm, heightCm } = size
+  const orientation: Orientation =
+    widthCm > heightCm ? 'landscape' : widthCm < heightCm ? 'portrait' : 'square'
+  return { widthCm, heightCm, orientation }
 }
 
 /**

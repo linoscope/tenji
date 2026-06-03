@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Photo, Placement } from '../state/types'
+import type { Photo, Placement, PlacementSize } from '../state/types'
 import type { BlobStore } from '../storage/blobStore'
 import { cmToPx } from '../geometry/scale'
-import { computeSizeFromLongEdge } from '../geometry/sizing'
+import { resolvePlacementSize } from '../geometry/sizing'
 
 type PlacementViewProps = {
   placement: Placement
@@ -35,13 +35,36 @@ type PlacementViewProps = {
   onMoveEnd?: (id: string) => void
   /** Fallback for tests that don't use the parent-driven snap pipeline. */
   onMove: (xCm: number, yCm: number) => void
-  onResize: (longEdgeCm: number) => void
+  onResize: (size: PlacementSize) => void
 }
 
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
 const CORNERS: Corner[] = ['nw', 'ne', 'sw', 'se']
-const MIN_LONG_EDGE_CM = 1
+const MIN_EDGE_CM = 1
 const HANDLE_SIZE_PX = 10
+
+function scaleSize(size: PlacementSize, ratio: number): PlacementSize {
+  if (size.mode === 'aspect') {
+    return {
+      mode: 'aspect',
+      longEdgeCm: Math.max(MIN_EDGE_CM, size.longEdgeCm * ratio),
+    }
+  }
+  return {
+    mode: 'crop',
+    widthCm: Math.max(MIN_EDGE_CM, size.widthCm * ratio),
+    heightCm: Math.max(MIN_EDGE_CM, size.heightCm * ratio),
+  }
+}
+
+function sizesEqual(a: PlacementSize, b: PlacementSize): boolean {
+  if (a.mode !== b.mode) return false
+  if (a.mode === 'aspect' && b.mode === 'aspect')
+    return a.longEdgeCm === b.longEdgeCm
+  if (a.mode === 'crop' && b.mode === 'crop')
+    return a.widthCm === b.widthCm && a.heightCm === b.heightCm
+  return false
+}
 
 export default function PlacementView({
   placement,
@@ -61,16 +84,16 @@ export default function PlacementView({
   onMove,
   onResize,
 }: PlacementViewProps) {
-  // While resizing, render the in-progress long edge so the photo + handles
+  // While resizing, render the in-progress size so the photo + handles
   // track the cursor live; commit to state on mouse up.
-  const [liveLongEdgeCm, setLiveLongEdgeCm] = useState<number | null>(null)
-  const liveLongEdgeRef = useRef<number | null>(null)
+  const [liveSize, setLiveSize] = useState<PlacementSize | null>(null)
+  const liveSizeRef = useRef<PlacementSize | null>(null)
   useEffect(() => {
-    liveLongEdgeRef.current = liveLongEdgeCm
-  }, [liveLongEdgeCm])
+    liveSizeRef.current = liveSize
+  }, [liveSize])
 
-  const effectiveLongEdgeCm = liveLongEdgeCm ?? placement.longEdgeCm
-  const size = computeSizeFromLongEdge(effectiveLongEdgeCm, photo.aspectRatio)
+  const effectiveSize = liveSize ?? placement.size
+  const size = resolvePlacementSize(effectiveSize, photo.aspectRatio)
   const widthPx = cmToPx(size.widthCm, scale)
   const heightPx = cmToPx(size.heightCm, scale)
 
@@ -125,7 +148,7 @@ export default function PlacementView({
     centerClientX: number
     centerClientY: number
     startDistPx: number
-    startLongEdgeCm: number
+    startSize: PlacementSize
   } | null>(null)
   const [resizing, setResizing] = useState(false)
 
@@ -139,16 +162,15 @@ export default function PlacementView({
         e.clientY - r.centerClientY,
       )
       const ratio = distNow / r.startDistPx
-      const next = Math.max(MIN_LONG_EDGE_CM, r.startLongEdgeCm * ratio)
-      setLiveLongEdgeCm(next)
+      setLiveSize(scaleSize(r.startSize, ratio))
     }
     const onUp = () => {
-      const live = liveLongEdgeRef.current
-      const start = resizeRef.current?.startLongEdgeCm
+      const live = liveSizeRef.current
+      const start = resizeRef.current?.startSize
       resizeRef.current = null
       setResizing(false)
-      setLiveLongEdgeCm(null)
-      if (live !== null && start !== undefined && live !== start) {
+      setLiveSize(null)
+      if (live && start && !sizesEqual(live, start)) {
         onResize(live)
       }
     }
@@ -174,9 +196,9 @@ export default function PlacementView({
       centerClientX: centerX,
       centerClientY: centerY,
       startDistPx,
-      startLongEdgeCm: placement.longEdgeCm,
+      startSize: placement.size,
     }
-    setLiveLongEdgeCm(placement.longEdgeCm)
+    setLiveSize(placement.size)
     setResizing(true)
   }
 
@@ -212,7 +234,9 @@ export default function PlacementView({
     <div
       data-testid={`placement-${placement.id}`}
       data-photo-id={photo.id}
-      data-long-edge-cm={placement.longEdgeCm}
+      data-size-mode={placement.size.mode}
+      data-width-cm={size.widthCm}
+      data-height-cm={size.heightCm}
       data-x-cm={placement.xCm}
       data-y-cm={placement.yCm}
       data-orientation={size.orientation}
@@ -238,7 +262,11 @@ export default function PlacementView({
         background: '#fff',
       }}
     >
-      <Thumbnail photo={photo} blobStore={blobStore} />
+      <Thumbnail
+        photo={photo}
+        blobStore={blobStore}
+        cover={placement.size.mode === 'crop'}
+      />
       {(showHandles ?? selected)
         ? CORNERS.map((corner) => (
             <span
@@ -276,7 +304,15 @@ function cornerStyle(corner: Corner): React.CSSProperties {
   }
 }
 
-function Thumbnail({ photo, blobStore }: { photo: Photo; blobStore: BlobStore }) {
+function Thumbnail({
+  photo,
+  blobStore,
+  cover,
+}: {
+  photo: Photo
+  blobStore: BlobStore
+  cover: boolean
+}) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -297,7 +333,15 @@ function Thumbnail({ photo, blobStore }: { photo: Photo; blobStore: BlobStore })
       src={url}
       alt={photo.filename}
       draggable={false}
-      style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }}
+      data-fit={cover ? 'cover' : 'contain'}
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'block',
+        pointerEvents: 'none',
+        objectFit: cover ? 'cover' : 'fill',
+        objectPosition: 'center',
+      }}
     />
   )
 }

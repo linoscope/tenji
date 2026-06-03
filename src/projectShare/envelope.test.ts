@@ -14,7 +14,7 @@ const sampleState: AppState = {
   ],
   walls: [{ id: 'w1', name: 'North', widthCm: 500, heightCm: 300 }],
   placements: [
-    { id: 'pl1', photoId: 'p1', wallId: 'w1', xCm: 100, yCm: 80, longEdgeCm: 42 },
+    { id: 'pl1', photoId: 'p1', wallId: 'w1', xCm: 100, yCm: 80, size: { mode: 'aspect' as const, longEdgeCm: 42 } },
   ],
   ui: {
     activeWallId: 'w1',

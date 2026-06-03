@@ -192,33 +192,35 @@ describe('history: undo restores document and active wall', () => {
 
 describe('history: merge-key coalescing', () => {
   it('consecutive same-merge-key edits within the idle gap collapse into a single undo step', () => {
-    // resizePlacement uses merge key resizePlacement:<id>.
+    // setPlacementSize uses merge key setPlacementSize:<id>.
     const initial = seededState()
     const h0 = createHistoryState(initial)
     const now = clockFrom([1000, 1050, 1100])
 
     const h1 = historyReducer(
       h0,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 30 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 30 } },
       now,
     )
     const h2 = historyReducer(
       h1,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 40 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 40 } },
       now,
     )
     const h3 = historyReducer(
       h2,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 50 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 50 } },
       now,
     )
 
     expect(h3.past).toHaveLength(1)
-    expect(h3.present.placements[0].longEdgeCm).toBe(50)
+    const finalSize = h3.present.placements[0].size
+    expect(finalSize.mode === 'aspect' && finalSize.longEdgeCm).toBe(50)
 
     // Single undo returns to the pre-resize value (42 = DEFAULT).
     const undone = historyReducer(h3, { type: 'undo' }, () => 0)
-    expect(undone.present.placements[0].longEdgeCm).toBe(42)
+    const undoneSize = undone.present.placements[0].size
+    expect(undoneSize.mode === 'aspect' && undoneSize.longEdgeCm).toBe(42)
   })
 
   it('a different merge key starts a new undo step', () => {
@@ -228,7 +230,7 @@ describe('history: merge-key coalescing', () => {
 
     const h1 = historyReducer(
       h0,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 30 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 30 } },
       now,
     )
     const h2 = historyReducer(
@@ -248,12 +250,12 @@ describe('history: merge-key coalescing', () => {
 
     const h1 = historyReducer(
       h0,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 30 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 30 } },
       now,
     )
     const h2 = historyReducer(
       h1,
-      { type: 'resizePlacement', id: 'pl1', longEdgeCm: 40 },
+      { type: 'setPlacementSize', id: 'pl1', size: { mode: 'aspect', longEdgeCm: 40 } },
       now,
     )
 

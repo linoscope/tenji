@@ -1,9 +1,41 @@
-import type { AppState } from './types'
+import type { AppState, Placement, PlacementSize } from './types'
 
 export const DEFAULT_WALL_WIDTH_CM = 800
 export const DEFAULT_WALL_HEIGHT_CM = 250
 /** Default long edge for a freshly placed photo (A3). */
 export const DEFAULT_PLACEMENT_LONG_EDGE_CM = 42
+
+/**
+ * Migrate a legacy placement that stored `longEdgeCm` directly into the new
+ * `size` discriminated union. Idempotent — if `size` already exists, returns
+ * the placement untouched.
+ */
+export function migratePlacementSize(
+  raw: Placement | (Omit<Placement, 'size'> & { longEdgeCm?: number }),
+): Placement {
+  const anyP = raw as Placement & { longEdgeCm?: number }
+  if (anyP.size) {
+    return {
+      id: anyP.id,
+      photoId: anyP.photoId,
+      wallId: anyP.wallId,
+      xCm: anyP.xCm,
+      yCm: anyP.yCm,
+      size: anyP.size,
+    }
+  }
+  return {
+    id: anyP.id,
+    photoId: anyP.photoId,
+    wallId: anyP.wallId,
+    xCm: anyP.xCm,
+    yCm: anyP.yCm,
+    size: {
+      mode: 'aspect',
+      longEdgeCm: anyP.longEdgeCm ?? DEFAULT_PLACEMENT_LONG_EDGE_CM,
+    },
+  }
+}
 
 export const initialState: AppState = {
   photos: [],
@@ -34,7 +66,7 @@ export type PastePlacementItem = {
   wallId: string
   xCm: number
   yCm: number
-  longEdgeCm: number
+  size: PlacementSize
 }
 
 export type Action =
@@ -53,7 +85,8 @@ export type Action =
   | { type: 'pastePlacements'; items: PastePlacementItem[] }
   | { type: 'movePlacement'; id: string; xCm: number; yCm: number }
   | { type: 'moveSelection'; dxCm: number; dyCm: number }
-  | { type: 'resizePlacement'; id: string; longEdgeCm: number }
+  | { type: 'setPlacementSize'; id: string; size: PlacementSize }
+  | { type: 'swapPlacementCropOrientation'; id: string }
   | { type: 'selectPlacement'; id: string }
   | { type: 'toggleSelectPlacement'; id: string }
   | { type: 'setSelection'; ids: string[] }
@@ -87,8 +120,12 @@ export function appReducer(state: AppState, action: Action): AppState {
         : ui.selectedPlacementId
           ? [ui.selectedPlacementId]
           : []
+      const placements = (action.state.placements as Placement[]).map((p) =>
+        migratePlacementSize(p),
+      )
       return {
         ...action.state,
+        placements,
         ui: {
           activeWallId: ui.activeWallId ?? null,
           selectedPlacementIds: ids,
@@ -157,13 +194,13 @@ export function appReducer(state: AppState, action: Action): AppState {
         blobKey: it.blobKey,
         aspectRatio: it.aspectRatio,
       }))
-      const newPlacements = action.items.map((it) => ({
+      const newPlacements: Placement[] = action.items.map((it) => ({
         id: it.placementId,
         photoId: it.photoId,
         wallId: it.wallId,
         xCm: it.xCm,
         yCm: it.yCm,
-        longEdgeCm: DEFAULT_PLACEMENT_LONG_EDGE_CM,
+        size: { mode: 'aspect', longEdgeCm: DEFAULT_PLACEMENT_LONG_EDGE_CM },
       }))
       return {
         ...state,
@@ -177,13 +214,13 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case 'pastePlacements': {
       if (action.items.length === 0) return state
-      const newPlacements = action.items.map((it) => ({
+      const newPlacements: Placement[] = action.items.map((it) => ({
         id: it.placementId,
         photoId: it.photoId,
         wallId: it.wallId,
         xCm: it.xCm,
         yCm: it.yCm,
-        longEdgeCm: it.longEdgeCm,
+        size: it.size,
       }))
       return {
         ...state,
@@ -213,12 +250,29 @@ export function appReducer(state: AppState, action: Action): AppState {
         ),
       }
     }
-    case 'resizePlacement':
+    case 'setPlacementSize':
       return {
         ...state,
         placements: state.placements.map((p) =>
-          p.id === action.id ? { ...p, longEdgeCm: action.longEdgeCm } : p,
+          p.id === action.id ? { ...p, size: action.size } : p,
         ),
+      }
+    case 'swapPlacementCropOrientation':
+      return {
+        ...state,
+        placements: state.placements.map((p) => {
+          if (p.id !== action.id) return p
+          if (p.size.mode !== 'crop') return p
+          if (p.size.widthCm === p.size.heightCm) return p
+          return {
+            ...p,
+            size: {
+              mode: 'crop',
+              widthCm: p.size.heightCm,
+              heightCm: p.size.widthCm,
+            },
+          }
+        }),
       }
     case 'selectPlacement':
       return {
