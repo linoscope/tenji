@@ -2967,3 +2967,135 @@ describe('Supabase share-by-link', () => {
     expect(screen.queryByText('Shared Wall')).toBeNull()
   })
 })
+
+describe('App / wall sidebar context menu', () => {
+  const seededWallsForDuplicate = (active: string = 'w1') => ({
+    photos: [
+      { id: 'ph-a', filename: 'a.jpg', blobKey: 'b-a', aspectRatio: 1 },
+    ],
+    walls: [
+      { id: 'w1', name: 'North', widthCm: 500, heightCm: 300 },
+      { id: 'w2', name: 'South', widthCm: 400, heightCm: 200 },
+    ],
+    placements: [
+      {
+        id: 'pl-a',
+        photoId: 'ph-a',
+        wallId: 'w1',
+        xCm: 100,
+        yCm: 80,
+        size: { mode: 'aspect' as const, longEdgeCm: 30 },
+      },
+      {
+        id: 'pl-b',
+        photoId: 'ph-a',
+        wallId: 'w1',
+        xCm: 200,
+        yCm: 100,
+        size: { mode: 'aspect' as const, longEdgeCm: 40 },
+      },
+    ],
+    ui: {
+      activeWallId: active,
+      selectedPlacementIds: [] as string[],
+      rulerEnabled: true,
+      silhouetteEnabled: true,
+    },
+  })
+
+  it('right-click on a wall in the sidebar → Duplicate creates a "<name> copy" wall, switches to it, and renders its cloned placements', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={createMemoryStatePort(seededWallsForDuplicate('w1'))}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `gen-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-pl-a')
+
+    const wallButton = screen.getByTestId('wall-item-w1')
+    fireEvent.contextMenu(wallButton, { clientX: 30, clientY: 60 })
+
+    const menu = await screen.findByTestId('wall-context-menu')
+    const dup = within(menu).getByRole('button', { name: /^duplicate$/i })
+    await user.click(dup)
+
+    // Sidebar gains a "North copy" entry right after "North".
+    await screen.findByRole('button', { name: /north copy/i })
+
+    // The new wall is active (the wall stage shows the cloned placements).
+    // Originals are NOT on the new wall — only the clones (with new ids gen-2, gen-3).
+    await screen.findByTestId('placement-gen-2')
+    await screen.findByTestId('placement-gen-3')
+    // pl-a / pl-b belong to the source wall, which is no longer active.
+    expect(screen.queryByTestId('placement-pl-a')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('placement-pl-b')).not.toBeInTheDocument()
+  })
+
+  it('duplicating a non-active wall still operates on the right-clicked wall', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    // Active is w2, but the user right-clicks w1.
+    render(
+      <App
+        port={createMemoryStatePort(seededWallsForDuplicate('w2'))}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `gen-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('wall')
+    const w1Button = screen.getByTestId('wall-item-w1')
+    fireEvent.contextMenu(w1Button, { clientX: 30, clientY: 60 })
+
+    const menu = await screen.findByTestId('wall-context-menu')
+    await user.click(within(menu).getByRole('button', { name: /^duplicate$/i }))
+
+    // The duplicate of w1 becomes active and its clones appear.
+    await screen.findByRole('button', { name: /north copy/i })
+    await screen.findByTestId('placement-gen-2')
+    await screen.findByTestId('placement-gen-3')
+  })
+
+  it('undo reverts a duplicateWall in one step', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    render(
+      <App
+        port={createMemoryStatePort(seededWallsForDuplicate('w1'))}
+        blobStore={createMemoryBlobStore()}
+        createId={() => `gen-${++n}`}
+        imageOps={fakeImageOps}
+      />,
+    )
+
+    await screen.findByTestId('placement-pl-a')
+
+    fireEvent.contextMenu(screen.getByTestId('wall-item-w1'), {
+      clientX: 30,
+      clientY: 60,
+    })
+    const menu = await screen.findByTestId('wall-context-menu')
+    await user.click(within(menu).getByRole('button', { name: /^duplicate$/i }))
+
+    await screen.findByRole('button', { name: /north copy/i })
+    await screen.findByTestId('placement-gen-2')
+
+    // ⌘Z undoes — copy wall and its clones disappear in one step.
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /north copy/i }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId('placement-gen-2')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('placement-gen-3')).not.toBeInTheDocument()
+    // Originals still there on the source wall (now active again).
+    await screen.findByTestId('placement-pl-a')
+  })
+})
